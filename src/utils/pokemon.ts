@@ -1,9 +1,19 @@
 import type { PokemonMaster } from '../types'
-import pokemonMasterData from '../data/pokemonMaster.json'
 
-export const POKEMON_MASTER: PokemonMaster[] = pokemonMasterData as PokemonMaster[]
+// ポケモンマスタ(図鑑データ)はCloudflare D1に保存されており、アプリ起動時に
+// src/utils/api.ts の fetchPokemonMaster() で取得し、setPokemonMaster() で
+// この配列に流し込む(App.tsx側でstate取得と合わせてロード完了までは画面を表示しないため、
+// 以下の関数群は読み込み完了後にのみ呼ばれる前提で同期的に扱っている)。
+export const POKEMON_MASTER: PokemonMaster[] = []
 
-const masterById = new Map(POKEMON_MASTER.map((p) => [p.id, p]))
+let masterById = new Map<string, PokemonMaster>()
+
+/** アプリ起動時に一度だけ呼び、D1から取得したポケモンマスタをセットする */
+export function setPokemonMaster(list: PokemonMaster[]): void {
+  POKEMON_MASTER.length = 0
+  POKEMON_MASTER.push(...list)
+  masterById = new Map(POKEMON_MASTER.map((p) => [p.id, p]))
+}
 
 export function getPokemon(id: string): PokemonMaster | undefined {
   return masterById.get(id)

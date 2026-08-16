@@ -14,8 +14,8 @@ interface Props {
  * ④(手動対応): PokéAPIのロケーションエリア出現データが第7世代以降で不足しているため、
  * 「① タイトルを選択(または新規入力) → ② そのタイトルに内定しているポケモンを選択 → 登録」
  * という手順でゲームタイトルの内定情報を手動補完するための画面。
- * ここでの登録はポケモンマスタ本体(pokemonMaster.json)を書き換えるのではなく、
- * localStorageに追加情報として重ねて保存し、一覧・絞り込みではマスタのgameTitlesと合算して使う。
+ * ここでの登録はポケモンマスタ本体(D1のpokemon_masterテーブル)を書き換えるのではなく、
+ * D1のtitle_overridesテーブルに追加情報として重ねて保存し、一覧・絞り込みではマスタのgameTitlesと合算して使う。
  */
 export default function TitleCurationModal({ onClose, allTitles, overrides, onSave }: Props) {
   const [title, setTitle] = useState('')
@@ -86,7 +86,7 @@ export default function TitleCurationModal({ onClose, allTitles, overrides, onSa
     <Modal title="ゲームタイトルの手動登録" onClose={onClose} wide>
       <div className="space-y-4">
         <p className="text-sm text-gray-500">
-          PokéAPI側のデータ不足により自動取得できないゲームタイトルの内定情報を、手動で補完するための画面です。ここでの登録はマスタデータ本体を書き換えるのではなく、ブラウザ内に追加情報として保存され、一覧の絞り込み等でマスタのデータと合算して使われます。
+          PokéAPI側のデータ不足により自動取得できないゲームタイトルの内定情報を、手動で補完するための画面です。ここでの登録はマスタデータ本体を書き換えるのではなく、追加情報として保存され、一覧の絞り込み等でマスタのデータと合算して使われます。
         </p>
 
         <div>

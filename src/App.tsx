@@ -4,6 +4,7 @@ import { createInitialBallStatuses } from './types'
 import type { PokemonMaster } from './types'
 import {
   fetchState,
+  fetchPokemonMaster,
   apiCreateEntry,
   apiCreateEntriesBulk,
   apiUpdateEntry,
@@ -12,7 +13,7 @@ import {
   apiImportEntries,
 } from './utils/api'
 import { generateId } from './utils/id'
-import { getPokemon, displayName, allGameTitles } from './utils/pokemon'
+import { getPokemon, displayName, allGameTitles, setPokemonMaster } from './utils/pokemon'
 import { exportEntriesToFile, parseImportedEntries } from './utils/exportImport'
 import { sortTitlesByReleaseOrder } from './utils/gameTitleOrder'
 import { setTitleMembers, getEffectiveGameTitles, type TitleOverrides } from './utils/titleOverrides'
@@ -68,9 +69,13 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false
-    fetchState()
-      .then((state) => {
+    // ポケモンマスタ(図鑑データ)と登録データ・タイトル手動登録情報を並行して取得する。
+    // マスタは setPokemonMaster() で utils/pokemon.ts 側に反映してから loading を解除するため、
+    // それ以降にレンダリングされる画面では常にマスタが読み込み済みの状態で同期的に参照できる。
+    Promise.all([fetchPokemonMaster(), fetchState()])
+      .then(([master, state]) => {
         if (cancelled) return
+        setPokemonMaster(master)
         setEntries(state.entries)
         setTitleOverrides(state.titleOverrides)
       })

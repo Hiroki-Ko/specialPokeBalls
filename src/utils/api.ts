@@ -1,4 +1,4 @@
-import type { BallType, BallStatusValue, OshaboEntry } from '../types'
+import type { BallType, BallStatusValue, OshaboEntry, PokemonMaster } from '../types'
 import type { TitleOverrides } from './titleOverrides'
 
 export interface AppState {
@@ -22,6 +22,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 /** 起動時に一度だけ呼び、登録データとタイトル手動登録情報をまとめて取得する */
 export function fetchState(): Promise<AppState> {
   return request<AppState>('/api/state')
+}
+
+/** 起動時にfetchStateと並行して呼び、ポケモンマスタ(図鑑データ)を取得する */
+export function fetchPokemonMaster(): Promise<PokemonMaster[]> {
+  return request<PokemonMaster[]>('/api/pokemon-master')
 }
 
 /** idやcreatedAtはApp.tsx側(createEntry)で既に決定済みのentryをそのまま保存する */

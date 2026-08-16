@@ -15,6 +15,9 @@ dist-ssr
 # wrangler local dev state (D1のローカルsqlite等)
 .wrangler
 
+# scripts/seed-pokemon-master.mjs が生成する一時ファイル(自動生成物のためコミット不要)
+pokemon_master_seed.sql
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
