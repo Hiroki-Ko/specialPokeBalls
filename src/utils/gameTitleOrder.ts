@@ -43,6 +43,8 @@ export const GAME_TITLE_RELEASE_ORDER = [
   'スカーレット',
   'バイオレット',
   'Legends ZA',
+  'ウィンド',
+  'ウェーブ',
 ]
 
 /**

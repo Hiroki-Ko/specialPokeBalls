@@ -2,14 +2,19 @@ import { useState } from 'react'
 import type { OshaboEntry } from '../types'
 import { BALL_TYPES } from '../types'
 import { getPokemon, displayName } from '../utils/pokemon'
+import type { TitleOverrides } from '../utils/titleOverrides'
 import Modal from './Modal'
 
 interface Props {
   entry: OshaboEntry
   /** trueならD1に実エントリがある(オシャボ入手状況やメモを一度でも編集したことがある)状態 */
   hasRealData: boolean
+  /** 発売順(新しい順)に並んだ、既知の個別ゲームタイトル一覧(出現ソフト編集の選択肢用) */
+  allTitles: string[]
+  titleOverrides: TitleOverrides
   onClose: () => void
   onToggleBall: (ballType: (typeof BALL_TYPES)[number]) => void
+  onToggleTitle: (title: string, include: boolean) => void
   onSave: (updates: { note: string | null }) => void
   onDelete: () => void
 }
@@ -19,7 +24,17 @@ interface Props {
  * マスタ全種が常に一覧に表示される仕様のため、この画面は常に特定の1匹(マスタの1行)に対応する。
  * そのため対象ポケモン自体の変更はできず、編集できるのはメモのみ。
  */
-export default function DetailModal({ entry, hasRealData, onClose, onToggleBall, onSave, onDelete }: Props) {
+export default function DetailModal({
+  entry,
+  hasRealData,
+  allTitles,
+  titleOverrides,
+  onClose,
+  onToggleBall,
+  onToggleTitle,
+  onSave,
+  onDelete,
+}: Props) {
   const pokemon = getPokemon(entry.pokemonId)
   const [editing, setEditing] = useState(false)
   const [note, setNote] = useState(entry.note ?? '')
@@ -88,6 +103,41 @@ export default function DetailModal({ entry, hasRealData, onClose, onToggleBall,
                 <div className="text-xs opacity-70">{bs.status}</div>
               </button>
             ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium">出現するソフト</label>
+          <p className="mb-2 text-xs text-gray-500">
+            緑=自動取得済み(変更不可)、紫=手動登録済み。灰色をクリックすると手動で追加、紫をクリックすると手動登録を解除します(登録漏れ・間違いの修正用)。
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {allTitles.map((title) => {
+              const isMaster = pokemon.gameTitles.includes(title)
+              const isOverride = (titleOverrides[title] ?? []).includes(pokemon.id)
+              return (
+                <button
+                  key={title}
+                  type="button"
+                  disabled={isMaster}
+                  title={
+                    isMaster
+                      ? `${title}: 自動取得済み(変更不可)`
+                      : `${title}: クリックで${isOverride ? '手動登録を解除' : '手動登録を追加'}`
+                  }
+                  onClick={() => onToggleTitle(title, !isOverride)}
+                  className={`rounded-full border px-2.5 py-1 text-xs transition ${
+                    isMaster
+                      ? 'cursor-default border-green-400 bg-green-50 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                      : isOverride
+                        ? 'border-indigo-400 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-300'
+                        : 'border-gray-300 bg-white text-gray-500 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {title}
+                </button>
+              )
+            })}
           </div>
         </div>
 

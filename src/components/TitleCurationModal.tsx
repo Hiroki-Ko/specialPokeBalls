@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import Modal from './Modal'
 import { POKEMON_MASTER, displayName } from '../utils/pokemon'
+import { kanaIncludes } from '../utils/kana'
 import type { TitleOverrides } from '../utils/titleOverrides'
 
 interface Props {
@@ -45,11 +46,12 @@ export default function TitleCurationModal({ onClose, allTitles, overrides, onSa
       list = list.filter(
         (p) =>
           (!Number.isNaN(qNum) && qNum > 0 && p.nationalNo === qNum) ||
-          p.name.includes(q) ||
-          displayName(p).includes(q),
+          kanaIncludes(p.name, q) ||
+          kanaIncludes(displayName(p), q),
       )
     }
-    return list.slice(0, 50)
+    // ポケモン名の昇順で表示する(全国No.順だと最初の方の一部しか目に入らないため)
+    return [...list].sort((a, b) => displayName(a).localeCompare(displayName(b), 'ja'))
   }, [query])
 
   const toggle = (id: string) => {

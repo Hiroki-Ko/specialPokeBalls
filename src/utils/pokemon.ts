@@ -1,4 +1,5 @@
 import type { PokemonMaster } from '../types'
+import { kanaIncludes } from './kana'
 
 // ポケモンマスタ(図鑑データ)はCloudflare D1に保存されており、アプリ起動時に
 // src/utils/api.ts の fetchPokemonMaster() で取得し、setPokemonMaster() で
@@ -36,7 +37,7 @@ export function searchPokemon(query: string): PokemonMaster[] {
     if (!Number.isNaN(qNum) && qNum > 0) {
       if (p.nationalNo === qNum) return true
     }
-    return p.name.includes(q) || displayName(p).includes(q)
+    return kanaIncludes(p.name, q) || kanaIncludes(displayName(p), q)
   }).slice(0, 30)
 }
 

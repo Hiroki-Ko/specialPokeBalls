@@ -14,8 +14,10 @@ import {
 } from './utils/api'
 import { generateId } from './utils/id'
 import { getPokemon, displayName, allGameTitles, setPokemonMaster, POKEMON_MASTER } from './utils/pokemon'
+import { kanaIncludes } from './utils/kana'
 import { exportEntriesToFile, parseImportedEntries } from './utils/exportImport'
-import { sortTitlesByReleaseOrder } from './utils/gameTitleOrder'
+import { sortTitlesByReleaseOrder, GAME_TITLE_RELEASE_ORDER } from './utils/gameTitleOrder'
+import { buildGameTitleGroups, titlesInGroup } from './utils/gameTitleGroups'
 import { setTitleMembers, getEffectiveGameTitles, type TitleOverrides } from './utils/titleOverrides'
 import Toolbar from './components/Toolbar'
 import PokemonTable from './components/PokemonTable'
@@ -103,13 +105,18 @@ export default function App() {
 
   useLayoutEffect(() => {
     const el = headerRef.current
+    // ローディング中はheaderRefを持つ要素自体がまだDOMに存在しないため、
+    // [](マウント時1回だけ)に依存させるとヌルのまま観測が始まらず、
+    // 読み込み完了後もheaderHeightが0のまま(=表の見出しがツールバーの裏に隠れる)になってしまう。
+    // loadingの変化に合わせてこのeffectを実際の描画後に再実行させることで、
+    // 要素が実在するタイミングで確実にResizeObserverを仕込む。
     if (!el) return
     const update = () => setHeaderHeight(el.getBoundingClientRect().height)
     update()
     const observer = new ResizeObserver(update)
     observer.observe(el)
     return () => observer.disconnect()
-  }, [])
+  }, [loading])
 
   // 100番台ジャンプボタン用: 直前に自分でジャンプさせた先の全国No.と、
   // スムーススクロール中かどうか、その間にユーザーが手動でスクロールしたかどうかを記録する。
@@ -156,9 +163,9 @@ export default function App() {
     })
   }, [registeredByPokemonId])
 
-  // ④手動対応分を含めたゲームタイトル一覧(絞り込みのプルダウン・手動登録画面の候補用)。
-  // 発売順の降順(新しいタイトルが上)で並べる
-  const gameTitles = useMemo(() => {
+  // ④手動対応分を含めたゲームタイトル一覧(個別タイトル単位、発売順の降順)。
+  // 「ゲームタイトル手動登録」画面の①タイトル選択の候補には、グループではなく個別タイトルを出す。
+  const individualGameTitles = useMemo(() => {
     const set = new Set(allGameTitles())
     for (const [t, ids] of Object.entries(titleOverrides)) {
       if (ids.length > 0) set.add(t)
@@ -166,16 +173,34 @@ export default function App() {
     return sortTitlesByReleaseOrder([...set], 'desc')
   }, [titleOverrides])
 
+  // 絞り込みドロップダウン用: 同世代の複数タイトル(例: ソード・シールド)を1つの選択肢にまとめたもの。
+  // どれか1タイトルにでも出現すれば、そのグループを選んだ時にヒットする。
+  const gameTitleGroups = useMemo(
+    () => buildGameTitleGroups(individualGameTitles, 'desc'),
+    [individualGameTitles],
+  )
+
+  // 詳細画面「出現するソフト」欄用: 実際に使われているかどうかに関わらず、既知のタイトルを
+  // すべて発売順(新しい順)で網羅する。該当しないものはチェックが付かないだけなので、
+  // 未使用のタイトルも含めて全部見せてよい(手動で自由入力された独自タイトルも末尾に含める)。
+  const allKnownTitles = useMemo(
+    () =>
+      sortTitlesByReleaseOrder([...new Set([...GAME_TITLE_RELEASE_ORDER, ...individualGameTitles])], 'desc'),
+    [individualGameTitles],
+  )
+
   const visibleEntries = useMemo(() => {
     const q = search.trim()
+    const titleFilterMembers = titleFilter ? titlesInGroup(gameTitleGroups, titleFilter) : null
+
     let list = allDisplayEntries.filter((entry) => {
       const pokemon = getPokemon(entry.pokemonId)
 
-      if (
-        titleFilter &&
-        !(pokemon ? getEffectiveGameTitles(pokemon, titleOverrides).includes(titleFilter) : false)
-      ) {
-        return false
+      if (titleFilterMembers) {
+        const matchesTitle = pokemon
+          ? getEffectiveGameTitles(pokemon, titleOverrides).some((t) => titleFilterMembers.includes(t))
+          : false
+        if (!matchesTitle) return false
       }
 
       if (statusFilter !== 'all') {
@@ -187,10 +212,10 @@ export default function App() {
       if (q) {
         const matchesPokemon =
           pokemon !== undefined &&
-          (pokemon.name.includes(q) ||
-            displayName(pokemon).includes(q) ||
+          (kanaIncludes(pokemon.name, q) ||
+            kanaIncludes(displayName(pokemon), q) ||
             String(pokemon.nationalNo).includes(q))
-        const matchesBall = entry.ballStatuses.some((b) => b.ballType.includes(q))
+        const matchesBall = entry.ballStatuses.some((b) => kanaIncludes(b.ballType, q))
         if (!matchesPokemon && !matchesBall) return false
       }
 
@@ -212,7 +237,7 @@ export default function App() {
     }
 
     return list
-  }, [allDisplayEntries, search, statusFilter, titleFilter, sort, titleOverrides])
+  }, [allDisplayEntries, search, statusFilter, titleFilter, sort, titleOverrides, gameTitleGroups])
 
   // 絞り込み・並び替えが変わると一覧上の全国No.の並びの意味が変わるため、
   // 100番台ジャンプボタンが覚えている「直前のジャンプ先」は無効化して実測し直す
@@ -333,6 +358,20 @@ export default function App() {
     setTitleOverrides((prev) => setTitleMembers(prev, title, pokemonIds))
     apiSaveTitleOverrideMembers(title, pokemonIds).catch((err: unknown) =>
       notifySaveError('ゲームタイトルの手動登録', err),
+    )
+  }
+
+  /** 詳細画面から、特定のポケモン1匹について特定のタイトルへの手動登録を追加/解除する */
+  const handleToggleTitleForPokemon = (title: string, include: boolean) => {
+    if (!selectedEntry) return
+    const pokemonId = selectedEntry.pokemonId
+    const current = titleOverrides[title] ?? []
+    const has = current.includes(pokemonId)
+    if (has === include) return
+    const next = include ? [...current, pokemonId] : current.filter((id) => id !== pokemonId)
+    setTitleOverrides((prev) => setTitleMembers(prev, title, next))
+    apiSaveTitleOverrideMembers(title, next).catch((err: unknown) =>
+      notifySaveError('出現ソフトの編集', err),
     )
   }
 
@@ -482,7 +521,7 @@ export default function App() {
           onStatusFilterChange={setStatusFilter}
           titleFilter={titleFilter}
           onTitleFilterChange={setTitleFilter}
-          gameTitles={gameTitles}
+          gameTitleGroups={gameTitleGroups}
           onClearFilters={handleClearFilters}
           onOpenRegister={() => setShowRegister(true)}
           onOpenBulkRegister={() => setShowBulkRegister(true)}
@@ -514,7 +553,7 @@ export default function App() {
       {showTitleCuration && (
         <TitleCurationModal
           onClose={() => setShowTitleCuration(false)}
-          allTitles={gameTitles}
+          allTitles={allKnownTitles}
           overrides={titleOverrides}
           onSave={handleSaveTitleOverride}
         />
@@ -523,8 +562,11 @@ export default function App() {
         <DetailModal
           entry={selectedEntry}
           hasRealData={registeredByPokemonId.has(selectedEntry.pokemonId)}
+          allTitles={allKnownTitles}
+          titleOverrides={titleOverrides}
           onClose={() => setSelectedEntryId(null)}
           onToggleBall={handleToggleBall}
+          onToggleTitle={handleToggleTitleForPokemon}
           onSave={handleSaveDetail}
           onDelete={handleDelete}
         />

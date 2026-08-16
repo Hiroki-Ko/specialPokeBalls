@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { StatusFilter } from '../App'
+import type { GameTitleGroup } from '../utils/gameTitleGroups'
 
 interface Props {
   search: string
@@ -8,7 +9,7 @@ interface Props {
   onStatusFilterChange: (v: StatusFilter) => void
   titleFilter: string
   onTitleFilterChange: (v: string) => void
-  gameTitles: string[]
+  gameTitleGroups: GameTitleGroup[]
   onClearFilters: () => void
   onOpenRegister: () => void
   onOpenBulkRegister: () => void
@@ -29,7 +30,7 @@ export default function Toolbar({
   onStatusFilterChange,
   titleFilter,
   onTitleFilterChange,
-  gameTitles,
+  gameTitleGroups,
   onClearFilters,
   onOpenRegister,
   onOpenBulkRegister,
@@ -67,9 +68,9 @@ export default function Toolbar({
           onChange={(e) => onTitleFilterChange(e.target.value)}
         >
           <option value="">すべてのゲームタイトル</option>
-          {gameTitles.map((t) => (
-            <option key={t} value={t}>
-              {t}
+          {gameTitleGroups.map((g) => (
+            <option key={g.label} value={g.label}>
+              {g.label}
             </option>
           ))}
         </select>
