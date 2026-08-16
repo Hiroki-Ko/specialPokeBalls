@@ -13,7 +13,7 @@ import {
   apiImportEntries,
 } from './utils/api'
 import { generateId } from './utils/id'
-import { getPokemon, displayName, allGameTitles, setPokemonMaster } from './utils/pokemon'
+import { getPokemon, displayName, allGameTitles, setPokemonMaster, POKEMON_MASTER } from './utils/pokemon'
 import { exportEntriesToFile, parseImportedEntries } from './utils/exportImport'
 import { sortTitlesByReleaseOrder } from './utils/gameTitleOrder'
 import { setTitleMembers, getEffectiveGameTitles, type TitleOverrides } from './utils/titleOverrides'
@@ -132,6 +132,30 @@ export default function App() {
 
   const registeredIds = useMemo(() => new Set(entries.map((e) => e.pokemonId)), [entries])
 
+  // pokemonId → 実際にD1へ保存されているエントリ、の対応表(1ポケモンにつき実体は最大1件の前提)
+  const registeredByPokemonId = useMemo(() => new Map(entries.map((e) => [e.pokemonId, e])), [entries])
+
+  /**
+   * マスタ全件(POKEMON_MASTER)を基準にした表示用の一覧。
+   * D1に実体(登録済みエントリ)があればそれを使い、なければ「全ボール未入手・メモなし」の
+   * 仮の行(id はそのポケモン自身の id と一致させる)をその場で作る。
+   * これにより、一度も登録操作をしていないポケモンも含めて常に全種が一覧に表示され、
+   * 実際にオシャボ入手状況やメモを触った瞬間に初めてD1側へ実エントリが作成される。
+   */
+  const allDisplayEntries = useMemo<OshaboEntry[]>(() => {
+    return POKEMON_MASTER.map((p) => {
+      const real = registeredByPokemonId.get(p.id)
+      if (real) return real
+      return {
+        id: p.id,
+        pokemonId: p.id,
+        note: null,
+        createdAt: '',
+        ballStatuses: createInitialBallStatuses(),
+      }
+    })
+  }, [registeredByPokemonId])
+
   // ④手動対応分を含めたゲームタイトル一覧(絞り込みのプルダウン・手動登録画面の候補用)。
   // 発売順の降順(新しいタイトルが上)で並べる
   const gameTitles = useMemo(() => {
@@ -144,7 +168,7 @@ export default function App() {
 
   const visibleEntries = useMemo(() => {
     const q = search.trim()
-    let list = entries.filter((entry) => {
+    let list = allDisplayEntries.filter((entry) => {
       const pokemon = getPokemon(entry.pokemonId)
 
       if (
@@ -188,7 +212,7 @@ export default function App() {
     }
 
     return list
-  }, [entries, search, statusFilter, titleFilter, sort, titleOverrides])
+  }, [allDisplayEntries, search, statusFilter, titleFilter, sort, titleOverrides])
 
   // 絞り込み・並び替えが変わると一覧上の全国No.の並びの意味が変わるため、
   // 100番台ジャンプボタンが覚えている「直前のジャンプ先」は無効化して実測し直す
@@ -196,16 +220,20 @@ export default function App() {
     lastJumpNoRef.current = null
   }, [search, statusFilter, titleFilter, sort])
 
-  const selectedEntry = entries.find((e) => e.id === selectedEntryId) ?? null
+  const selectedEntry = allDisplayEntries.find((e) => e.id === selectedEntryId) ?? null
 
   const handleRegisterSingle = (pokemon: PokemonMaster, note: string) => {
+    // 既に実エントリがあるポケモンを重複登録しないようにする(全種デフォルト表示化に伴うガード)
+    if (registeredByPokemonId.has(pokemon.id)) return
     const entry = createEntry(pokemon.id, note)
     setEntries((prev) => [...prev, entry])
     apiCreateEntry(entry).catch((err: unknown) => notifySaveError('登録', err))
   }
 
   const handleRegisterBulk = (pokemons: PokemonMaster[]) => {
-    const newEntries = pokemons.map((p) => createEntry(p.id, ''))
+    const targets = pokemons.filter((p) => !registeredByPokemonId.has(p.id))
+    if (targets.length === 0) return
+    const newEntries = targets.map((p) => createEntry(p.id, ''))
     setEntries((prev) => [...prev, ...newEntries])
     apiCreateEntriesBulk(newEntries).catch((err: unknown) => notifySaveError('一括登録', err))
   }
@@ -214,17 +242,37 @@ export default function App() {
     entryId: string,
     ballType: OshaboEntry['ballStatuses'][number]['ballType'],
   ) => {
-    const target = entries.find((e) => e.id === entryId)
-    if (!target) return
-    const newBallStatuses = target.ballStatuses.map((bs) =>
-      bs.ballType === ballType
-        ? { ...bs, status: (bs.status === '未入手' ? '入手済み' : '未入手') as typeof bs.status }
-        : bs,
+    const existing = entries.find((e) => e.id === entryId)
+
+    if (existing) {
+      const newBallStatuses = existing.ballStatuses.map((bs) =>
+        bs.ballType === ballType
+          ? { ...bs, status: (bs.status === '未入手' ? '入手済み' : '未入手') as typeof bs.status }
+          : bs,
+      )
+      setEntries((prev) => prev.map((e) => (e.id === entryId ? { ...e, ballStatuses: newBallStatuses } : e)))
+      apiUpdateEntry(entryId, { ballStatuses: newBallStatuses }).catch((err: unknown) =>
+        notifySaveError('オシャボ入手状況', err),
+      )
+      return
+    }
+
+    // まだD1上に実体がない(マスタ由来のデフォルト表示行)場合は、この操作をきっかけに実エントリを新規作成する。
+    // 仮の行のidは対象ポケモンのidと一致させているため、entryId はそのまま pokemonId として使える。
+    const pokemon = getPokemon(entryId)
+    if (!pokemon) return
+    const newBallStatuses = createInitialBallStatuses().map((bs) =>
+      bs.ballType === ballType ? { ...bs, status: '入手済み' as const } : bs,
     )
-    setEntries((prev) => prev.map((e) => (e.id === entryId ? { ...e, ballStatuses: newBallStatuses } : e)))
-    apiUpdateEntry(entryId, { ballStatuses: newBallStatuses }).catch((err: unknown) =>
-      notifySaveError('オシャボ入手状況', err),
-    )
+    const newEntry: OshaboEntry = {
+      id: pokemon.id,
+      pokemonId: pokemon.id,
+      note: null,
+      createdAt: new Date().toISOString(),
+      ballStatuses: newBallStatuses,
+    }
+    setEntries((prev) => [...prev, newEntry])
+    apiCreateEntry(newEntry).catch((err: unknown) => notifySaveError('オシャボ入手状況', err))
   }
 
   // 詳細モーダル用(選択中エントリに対する切り替え)
@@ -233,19 +281,42 @@ export default function App() {
     handleToggleBallForEntry(selectedEntry.id, ballType)
   }
 
-  const handleSaveDetail = (updates: { pokemonId: string; note: string | null }) => {
+  const handleSaveDetail = (updates: { note: string | null }) => {
     if (!selectedEntry) return
     const entryId = selectedEntry.id
-    setEntries((prev) => prev.map((e) => (e.id !== entryId ? e : { ...e, ...updates })))
-    apiUpdateEntry(entryId, updates).catch((err: unknown) => notifySaveError('編集内容', err))
+    const existing = entries.find((e) => e.id === entryId)
+
+    if (existing) {
+      setEntries((prev) => prev.map((e) => (e.id !== entryId ? e : { ...e, ...updates })))
+      apiUpdateEntry(entryId, updates).catch((err: unknown) => notifySaveError('編集内容', err))
+      return
+    }
+
+    // 仮の行(未登録)の場合は、メモ保存を機に実エントリを新規作成する
+    const newEntry: OshaboEntry = {
+      id: selectedEntry.pokemonId,
+      pokemonId: selectedEntry.pokemonId,
+      note: updates.note,
+      createdAt: new Date().toISOString(),
+      ballStatuses: selectedEntry.ballStatuses,
+    }
+    setEntries((prev) => [...prev, newEntry])
+    apiCreateEntry(newEntry).catch((err: unknown) => notifySaveError('編集内容', err))
   }
 
+  /**
+   * マスタ全種を常に表示する仕様のため、「削除」は一覧から行を消すのではなく、
+   * そのポケモンのオシャボ入手状況・メモを初期状態(全ボール未入手・メモなし)へリセットする、
+   * という意味になる(D1側の実エントリ行は削除し、表示は仮の行にフォールバックする)。
+   */
   const handleDelete = () => {
     if (!selectedEntry) return
     const entryId = selectedEntry.id
-    setEntries((prev) => prev.filter((e) => e.id !== entryId))
+    const wasReal = entries.some((e) => e.id === entryId)
     setSelectedEntryId(null)
-    apiDeleteEntry(entryId).catch((err: unknown) => notifySaveError('削除', err))
+    if (!wasReal) return
+    setEntries((prev) => prev.filter((e) => e.id !== entryId))
+    apiDeleteEntry(entryId).catch((err: unknown) => notifySaveError('リセット', err))
   }
 
   const handleSortColumnClick = (column: SortColumn) => {
@@ -451,6 +522,7 @@ export default function App() {
       {selectedEntry && (
         <DetailModal
           entry={selectedEntry}
+          hasRealData={registeredByPokemonId.has(selectedEntry.pokemonId)}
           onClose={() => setSelectedEntryId(null)}
           onToggleBall={handleToggleBall}
           onSave={handleSaveDetail}

@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:full": "wrangler pages dev --d1=DB=oshabo-db -- npm run dev",
+    "dev:full": "npm run build && wrangler pages dev dist --live-reload --port 8799",
+    "watch": "vite build --watch",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",

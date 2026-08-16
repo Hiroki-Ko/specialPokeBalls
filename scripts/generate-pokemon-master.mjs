@@ -14,7 +14,13 @@
  * 参考記事: https://takosavi.hatenablog.com/entry/2024/12/30/001209
  *
  * 使い方:
- *   node scripts/generate-pokemon-master.mjs [--start 1] [--end 1025] [--out src/data/pokemonMaster.json] [--concurrency 8]
+ *   node scripts/generate-pokemon-master.mjs [--start 1] [--end 1025] [--out src/data/pokemonMaster.json] [--concurrency 8] [--allow-partial]
+ *
+ * 安全装置:
+ *   PokéAPIへの個別リクエストが失敗した種(species)は警告を出しつつスキップする仕様だが、
+ *   スキップ率が5%を超える場合は「ネットワーク不調等で不完全なデータしか取れなかった」
+ *   可能性が高いとみなし、出力ファイルを上書きせずに中断する(既存のファイルはそのまま残る)。
+ *   意図的に不完全な結果でよい場合のみ --allow-partial を付けて実行する。
  *
  * 実装メモ:
  *   実際の並列数制限は fetchJson() の内部(HTTPリクエストを行う最下層)でのみ行う。
@@ -379,6 +385,7 @@ async function main() {
   const end = Number(getArg('--end', '1025'))
   const outPath = getArg('--out', 'src/data/pokemonMaster.json')
   const concurrency = Number(getArg('--concurrency', '8'))
+  const allowPartial = args.includes('--allow-partial')
 
   limit = createLimiter(concurrency)
 
@@ -414,17 +421,38 @@ async function main() {
   const result = speciesResults.flat()
   result.sort((a, b) => a.nationalNo - b.nationalNo || a.id.localeCompare(b.id))
 
-  await fs.mkdir(path.dirname(outPath), { recursive: true })
-  await fs.writeFile(outPath, JSON.stringify(result, null, 2) + '\n', 'utf-8')
-  console.log(`Wrote ${result.length} records to ${outPath}`)
+  // 一部の種(species)取得がネットワークエラー等で失敗すると、そのままでは「一部だけ取れた
+  // 不完全なデータ」でも黙って出力ファイルを上書きしてしまう。それを防ぐため、失敗率が
+  // 閾値を超える場合は出力せずに中断する(--allow-partial を付けた場合のみ強制的に出力する)。
+  const FAILURE_RATE_THRESHOLD = 0.05 // 5%を超える種の取得失敗があれば異常とみなす
+  const failureRate = entries.length > 0 ? failures.length / entries.length : 0
 
   if (failures.length > 0) {
-    console.warn(`\n${failures.length} species failed and were skipped:`)
+    console.warn(`\n${failures.length}/${entries.length} species failed and were skipped:`)
     for (const f of failures.slice(0, 20)) {
       console.warn(`  - ${f.entry}: ${f.error}`)
     }
     if (failures.length > 20) console.warn(`  ...and ${failures.length - 20} more`)
   }
+
+  if (failureRate > FAILURE_RATE_THRESHOLD && !allowPartial) {
+    console.error(
+      `\n[ABORT] 失敗率が高すぎるため ${outPath} への書き込みを中止しました` +
+        `(${failures.length}/${entries.length} 件失敗 = ${(failureRate * 100).toFixed(1)}%、` +
+        `閾値 ${(FAILURE_RATE_THRESHOLD * 100).toFixed(0)}%)。\n` +
+        'PokéAPI側の一時的な障害やネットワーク不調の可能性があります。時間をおいて再実行してください。\n' +
+        'この不完全な結果でよいと分かっている場合のみ、--allow-partial を付けて再実行すると強制的に出力します。',
+    )
+    process.exitCode = 1
+    return
+  }
+
+  await fs.mkdir(path.dirname(outPath), { recursive: true })
+  await fs.writeFile(outPath, JSON.stringify(result, null, 2) + '\n', 'utf-8')
+  console.log(
+    `Wrote ${result.length} records to ${outPath}` +
+      (failures.length > 0 ? ` (${failures.length}/${entries.length} species skipped due to errors)` : ''),
+  )
 }
 
 main().catch((err) => {

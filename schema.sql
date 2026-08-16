@@ -3,12 +3,16 @@
 --   ローカル動作確認: wrangler d1 execute DB --local --file=schema.sql
 --   本番(Cloudflare上のD1)への適用: wrangler d1 execute DB --remote --file=schema.sql
 
+-- 1ポケモン(pokemon_id)につき実エントリは最大1件の前提(マスタ全種をデフォルト表示し、
+-- 未登録分は仮想的に「全ボール未入手」として扱う仕様のため)。UNIQUE制約で二重登録を防ぐ。
 CREATE TABLE IF NOT EXISTS entries (
   id TEXT PRIMARY KEY,
   pokemon_id TEXT NOT NULL,
   note TEXT,
   created_at TEXT NOT NULL
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_entries_pokemon_id ON entries(pokemon_id);
 
 -- オシャボ(ボール)ごとの入手状況。entriesに対して1行1ボールで持つ。
 -- (D1側では外部キーのON DELETE CASCADEに頼らず、entries削除時はAPI側で明示的に削除する)

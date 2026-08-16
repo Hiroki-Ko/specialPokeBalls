@@ -84,7 +84,7 @@ export default function PokemonTable({
   if (entries.length === 0) {
     return (
       <p className="py-12 text-center text-sm text-gray-500">
-        登録されているポケモンがありません。「新規登録」または「一括登録」から追加してください。
+        該当するポケモンがありません。絞り込み条件を確認してください。
       </p>
     )
   }

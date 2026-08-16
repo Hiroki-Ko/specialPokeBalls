@@ -2,22 +2,26 @@ import { useState } from 'react'
 import type { OshaboEntry } from '../types'
 import { BALL_TYPES } from '../types'
 import { getPokemon, displayName } from '../utils/pokemon'
-import PokemonPicker from './PokemonPicker'
 import Modal from './Modal'
 
 interface Props {
   entry: OshaboEntry
+  /** trueならD1に実エントリがある(オシャボ入手状況やメモを一度でも編集したことがある)状態 */
+  hasRealData: boolean
   onClose: () => void
   onToggleBall: (ballType: (typeof BALL_TYPES)[number]) => void
-  onSave: (updates: { pokemonId: string; note: string | null }) => void
+  onSave: (updates: { note: string | null }) => void
   onDelete: () => void
 }
 
-/** 5章 詳細表示 / 3.3 ステータス管理 / 3.4 編集・削除 */
-export default function DetailModal({ entry, onClose, onToggleBall, onSave, onDelete }: Props) {
+/**
+ * 5章 詳細表示 / 3.3 ステータス管理 / 3.4 編集・削除
+ * マスタ全種が常に一覧に表示される仕様のため、この画面は常に特定の1匹(マスタの1行)に対応する。
+ * そのため対象ポケモン自体の変更はできず、編集できるのはメモのみ。
+ */
+export default function DetailModal({ entry, hasRealData, onClose, onToggleBall, onSave, onDelete }: Props) {
   const pokemon = getPokemon(entry.pokemonId)
   const [editing, setEditing] = useState(false)
-  const [pickerPokemonId, setPickerPokemonId] = useState(entry.pokemonId)
   const [note, setNote] = useState(entry.note ?? '')
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
@@ -40,18 +44,9 @@ export default function DetailModal({ entry, onClose, onToggleBall, onSave, onDe
     )
   }
 
-  const pickerPokemon = getPokemon(pickerPokemonId) ?? pokemon
-
   return (
     <Modal title={`No.${pokemon.nationalNo} ${displayName(pokemon)}`} onClose={onClose} wide>
       <div className="space-y-4">
-        {editing ? (
-          <div>
-            <label className="mb-1 block text-sm font-medium">対象ポケモン</label>
-            <PokemonPicker value={pickerPokemon} onChange={(p) => setPickerPokemonId(p.id)} />
-          </div>
-        ) : null}
-
         <table className="w-full rounded bg-gray-50 text-sm dark:bg-gray-800">
           <tbody>
             <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -114,33 +109,34 @@ export default function DetailModal({ entry, onClose, onToggleBall, onSave, onDe
 
         <div className="flex items-center justify-between border-t border-gray-200 pt-4 dark:border-gray-700">
           <div>
-            {confirmingDelete ? (
-              <div className="flex items-center gap-2 text-sm">
-                <span>本当に削除しますか?</span>
+            {hasRealData &&
+              (confirmingDelete ? (
+                <div className="flex items-center gap-2 text-sm">
+                  <span>入手状況とメモを初期状態に戻しますか?</span>
+                  <button
+                    type="button"
+                    className="rounded bg-red-600 px-3 py-1 text-white"
+                    onClick={onDelete}
+                  >
+                    リセットする
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded px-3 py-1 text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                    onClick={() => setConfirmingDelete(false)}
+                  >
+                    やめる
+                  </button>
+                </div>
+              ) : (
                 <button
                   type="button"
-                  className="rounded bg-red-600 px-3 py-1 text-white"
-                  onClick={onDelete}
+                  className="text-sm text-red-600 hover:underline"
+                  onClick={() => setConfirmingDelete(true)}
                 >
-                  削除する
+                  入手状況・メモをリセットする
                 </button>
-                <button
-                  type="button"
-                  className="rounded px-3 py-1 text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
-                  onClick={() => setConfirmingDelete(false)}
-                >
-                  やめる
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="text-sm text-red-600 hover:underline"
-                onClick={() => setConfirmingDelete(true)}
-              >
-                このエントリを削除する
-              </button>
-            )}
+              ))}
           </div>
 
           <div className="flex gap-2">
@@ -151,7 +147,6 @@ export default function DetailModal({ entry, onClose, onToggleBall, onSave, onDe
                   className="rounded px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
                   onClick={() => {
                     setEditing(false)
-                    setPickerPokemonId(entry.pokemonId)
                     setNote(entry.note ?? '')
                   }}
                 >
@@ -161,7 +156,7 @@ export default function DetailModal({ entry, onClose, onToggleBall, onSave, onDe
                   type="button"
                   className="rounded bg-indigo-600 px-4 py-2 text-sm text-white"
                   onClick={() => {
-                    onSave({ pokemonId: pickerPokemonId, note: note.trim() ? note.trim() : null })
+                    onSave({ note: note.trim() ? note.trim() : null })
                     setEditing(false)
                   }}
                 >
