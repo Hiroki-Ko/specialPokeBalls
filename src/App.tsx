@@ -2,18 +2,20 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { OshaboEntry } from './types'
 import { createInitialBallStatuses } from './types'
 import type { PokemonMaster } from './types'
-import { loadEntries, saveEntries } from './utils/storage'
+import {
+  fetchState,
+  apiCreateEntry,
+  apiCreateEntriesBulk,
+  apiUpdateEntry,
+  apiDeleteEntry,
+  apiSaveTitleOverrideMembers,
+  apiImportEntries,
+} from './utils/api'
 import { generateId } from './utils/id'
 import { getPokemon, displayName, allGameTitles } from './utils/pokemon'
 import { exportEntriesToFile, parseImportedEntries } from './utils/exportImport'
 import { sortTitlesByReleaseOrder } from './utils/gameTitleOrder'
-import {
-  loadTitleOverrides,
-  saveTitleOverrides,
-  setTitleMembers,
-  getEffectiveGameTitles,
-  type TitleOverrides,
-} from './utils/titleOverrides'
+import { setTitleMembers, getEffectiveGameTitles, type TitleOverrides } from './utils/titleOverrides'
 import Toolbar from './components/Toolbar'
 import PokemonTable from './components/PokemonTable'
 import RegisterModal from './components/RegisterModal'
@@ -44,7 +46,16 @@ function createEntry(pokemonId: string, note: string): OshaboEntry {
 }
 
 export default function App() {
-  const [entries, setEntries] = useState<OshaboEntry[]>(() => loadEntries())
+  const [entries, setEntries] = useState<OshaboEntry[]>([])
+  const [titleOverrides, setTitleOverrides] = useState<TitleOverrides>({})
+
+  // Cloudflare D1(Pages Functions経由)からの初回読み込み状態
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  // 各種更新(登録・編集・削除等)をD1側へ保存する際に失敗した場合の通知
+  // (画面はいったん楽観的に更新済みのため、alertで都度ブロックせずバナー表示に留める)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [titleFilter, setTitleFilter] = useState('')
@@ -55,7 +66,30 @@ export default function App() {
   const [showTitleCuration, setShowTitleCuration] = useState(false)
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
 
-  const [titleOverrides, setTitleOverrides] = useState<TitleOverrides>(() => loadTitleOverrides())
+  useEffect(() => {
+    let cancelled = false
+    fetchState()
+      .then((state) => {
+        if (cancelled) return
+        setEntries(state.entries)
+        setTitleOverrides(state.titleOverrides)
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        setLoadError(err instanceof Error ? err.message : String(err))
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const notifySaveError = (context: string, err: unknown) => {
+    console.error(context, err)
+    setSaveError(`${context}の保存に失敗しました。通信状況を確認し、再度お試しください。`)
+  }
 
   // タイトル・絞り込み欄を画面上部に固定表示するため、その高さを実測して
   // 一覧テーブルの見出し(sticky)をその直下に重ならず配置できるようにする
@@ -90,14 +124,6 @@ export default function App() {
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
-
-  useEffect(() => {
-    saveEntries(entries)
-  }, [entries])
-
-  useEffect(() => {
-    saveTitleOverrides(titleOverrides)
-  }, [titleOverrides])
 
   const registeredIds = useMemo(() => new Set(entries.map((e) => e.pokemonId)), [entries])
 
@@ -168,30 +194,31 @@ export default function App() {
   const selectedEntry = entries.find((e) => e.id === selectedEntryId) ?? null
 
   const handleRegisterSingle = (pokemon: PokemonMaster, note: string) => {
-    setEntries((prev) => [...prev, createEntry(pokemon.id, note)])
+    const entry = createEntry(pokemon.id, note)
+    setEntries((prev) => [...prev, entry])
+    apiCreateEntry(entry).catch((err: unknown) => notifySaveError('登録', err))
   }
 
   const handleRegisterBulk = (pokemons: PokemonMaster[]) => {
-    setEntries((prev) => [...prev, ...pokemons.map((p) => createEntry(p.id, ''))])
+    const newEntries = pokemons.map((p) => createEntry(p.id, ''))
+    setEntries((prev) => [...prev, ...newEntries])
+    apiCreateEntriesBulk(newEntries).catch((err: unknown) => notifySaveError('一括登録', err))
   }
 
   const handleToggleBallForEntry = (
     entryId: string,
     ballType: OshaboEntry['ballStatuses'][number]['ballType'],
   ) => {
-    setEntries((prev) =>
-      prev.map((e) =>
-        e.id !== entryId
-          ? e
-          : {
-              ...e,
-              ballStatuses: e.ballStatuses.map((bs) =>
-                bs.ballType === ballType
-                  ? { ...bs, status: bs.status === '未入手' ? '入手済み' : '未入手' }
-                  : bs,
-              ),
-            },
-      ),
+    const target = entries.find((e) => e.id === entryId)
+    if (!target) return
+    const newBallStatuses = target.ballStatuses.map((bs) =>
+      bs.ballType === ballType
+        ? { ...bs, status: (bs.status === '未入手' ? '入手済み' : '未入手') as typeof bs.status }
+        : bs,
+    )
+    setEntries((prev) => prev.map((e) => (e.id === entryId ? { ...e, ballStatuses: newBallStatuses } : e)))
+    apiUpdateEntry(entryId, { ballStatuses: newBallStatuses }).catch((err: unknown) =>
+      notifySaveError('オシャボ入手状況', err),
     )
   }
 
@@ -203,15 +230,17 @@ export default function App() {
 
   const handleSaveDetail = (updates: { pokemonId: string; note: string | null }) => {
     if (!selectedEntry) return
-    setEntries((prev) =>
-      prev.map((e) => (e.id !== selectedEntry.id ? e : { ...e, ...updates })),
-    )
+    const entryId = selectedEntry.id
+    setEntries((prev) => prev.map((e) => (e.id !== entryId ? e : { ...e, ...updates })))
+    apiUpdateEntry(entryId, updates).catch((err: unknown) => notifySaveError('編集内容', err))
   }
 
   const handleDelete = () => {
     if (!selectedEntry) return
-    setEntries((prev) => prev.filter((e) => e.id !== selectedEntry.id))
+    const entryId = selectedEntry.id
+    setEntries((prev) => prev.filter((e) => e.id !== entryId))
     setSelectedEntryId(null)
+    apiDeleteEntry(entryId).catch((err: unknown) => notifySaveError('削除', err))
   }
 
   const handleSortColumnClick = (column: SortColumn) => {
@@ -226,6 +255,9 @@ export default function App() {
 
   const handleSaveTitleOverride = (title: string, pokemonIds: string[]) => {
     setTitleOverrides((prev) => setTitleMembers(prev, title, pokemonIds))
+    apiSaveTitleOverrideMembers(title, pokemonIds).catch((err: unknown) =>
+      notifySaveError('ゲームタイトルの手動登録', err),
+    )
   }
 
   /** 現在レンダリングされている(表示中の幅に対応する)行要素のみを取得する */
@@ -314,6 +346,7 @@ export default function App() {
     try {
       const text = await file.text()
       const imported = parseImportedEntries(text)
+      await apiImportEntries(imported)
       setEntries(imported)
       window.alert(`${imported.length}件のデータをインポートしました。`)
     } catch (err) {
@@ -321,10 +354,50 @@ export default function App() {
     }
   }
 
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+        読み込み中...
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 px-4 text-center">
+        <p className="text-sm text-red-600 dark:text-red-400">
+          データの読み込みに失敗しました。
+          <br />
+          {loadError}
+        </p>
+        <button
+          type="button"
+          className="rounded bg-indigo-600 px-4 py-2 text-sm text-white"
+          onClick={() => window.location.reload()}
+        >
+          再読み込み
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-6">
       <div ref={headerRef} className="sticky top-0 z-20 bg-white pb-2 dark:bg-gray-900">
         <h1 className="mb-4 text-xl font-bold">オシャボ管理</h1>
+
+        {saveError && (
+          <div className="mb-2 flex items-center justify-between gap-2 rounded bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950 dark:text-red-300">
+            <span>{saveError}</span>
+            <button
+              type="button"
+              className="shrink-0 underline"
+              onClick={() => setSaveError(null)}
+            >
+              閉じる
+            </button>
+          </div>
+        )}
 
         <Toolbar
           search={search}

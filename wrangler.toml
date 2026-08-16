@@ -1,0 +1,13 @@
+# Cloudflare Pages プロジェクト設定。
+# GitHubと連携したPagesプロジェクトの場合、この設定はビルド時に自動的に読み込まれる
+# (D1バインディングが反映されない場合は、Cloudflareダッシュボードの
+#  Pagesプロジェクト → Settings → Functions → D1 database bindings からも設定できる)。
+
+name = "specialpokeballs"
+pages_build_output_dir = "dist"
+compatibility_date = "2024-09-23"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "oshabo-db"
+database_id = "6ac09603-fe5e-42f1-9984-e44d0cfb5df8"
