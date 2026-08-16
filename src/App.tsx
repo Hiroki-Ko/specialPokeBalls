@@ -1,0 +1,405 @@
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { OshaboEntry } from './types'
+import { createInitialBallStatuses } from './types'
+import type { PokemonMaster } from './types'
+import { loadEntries, saveEntries } from './utils/storage'
+import { generateId } from './utils/id'
+import { getPokemon, displayName, allGameTitles } from './utils/pokemon'
+import { exportEntriesToFile, parseImportedEntries } from './utils/exportImport'
+import { sortTitlesByReleaseOrder } from './utils/gameTitleOrder'
+import {
+  loadTitleOverrides,
+  saveTitleOverrides,
+  setTitleMembers,
+  getEffectiveGameTitles,
+  type TitleOverrides,
+} from './utils/titleOverrides'
+import Toolbar from './components/Toolbar'
+import PokemonTable from './components/PokemonTable'
+import RegisterModal from './components/RegisterModal'
+import BulkRegisterModal from './components/BulkRegisterModal'
+import TitleCurationModal from './components/TitleCurationModal'
+import DetailModal from './components/DetailModal'
+
+export type StatusFilter = 'all' | '未入手' | '入手済み'
+export type SortColumn = 'nationalNo' | 'name'
+export type SortDirection = 'asc' | 'desc'
+export type SortState = { column: SortColumn; direction: SortDirection } | null
+
+/** 見出しクリックのたびに デフォルト(null) → 昇順 → 降順 → デフォルト の順で切り替える */
+function nextSortState(current: SortState, column: SortColumn): SortState {
+  if (!current || current.column !== column) return { column, direction: 'asc' }
+  if (current.direction === 'asc') return { column, direction: 'desc' }
+  return null
+}
+
+function createEntry(pokemonId: string, note: string): OshaboEntry {
+  return {
+    id: generateId(),
+    pokemonId,
+    note: note || null,
+    createdAt: new Date().toISOString(),
+    ballStatuses: createInitialBallStatuses(),
+  }
+}
+
+export default function App() {
+  const [entries, setEntries] = useState<OshaboEntry[]>(() => loadEntries())
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [titleFilter, setTitleFilter] = useState('')
+  const [sort, setSort] = useState<SortState>(null)
+
+  const [showRegister, setShowRegister] = useState(false)
+  const [showBulkRegister, setShowBulkRegister] = useState(false)
+  const [showTitleCuration, setShowTitleCuration] = useState(false)
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
+
+  const [titleOverrides, setTitleOverrides] = useState<TitleOverrides>(() => loadTitleOverrides())
+
+  // タイトル・絞り込み欄を画面上部に固定表示するため、その高さを実測して
+  // 一覧テーブルの見出し(sticky)をその直下に重ならず配置できるようにする
+  const headerRef = useRef<HTMLDivElement>(null)
+  const [headerHeight, setHeaderHeight] = useState(0)
+
+  useLayoutEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const update = () => setHeaderHeight(el.getBoundingClientRect().height)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  // 100番台ジャンプボタン用: 直前に自分でジャンプさせた先の全国No.と、
+  // スムーススクロール中かどうか、その間にユーザーが手動でスクロールしたかどうかを記録する。
+  // これにより、スムーススクロールが終わる前に連続でボタンを押しても
+  // (アニメーション中の中途半端なスクロール位置を毎回測り直すのではなく)
+  // 直前のジャンプ先を基準に確実に1ブロックずつ進められるようにする。
+  const lastJumpNoRef = useRef<number | null>(null)
+  const isProgrammaticScrollRef = useRef(false)
+  const userScrolledRef = useRef(false)
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!isProgrammaticScrollRef.current) {
+        userScrolledRef.current = true
+      }
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  useEffect(() => {
+    saveEntries(entries)
+  }, [entries])
+
+  useEffect(() => {
+    saveTitleOverrides(titleOverrides)
+  }, [titleOverrides])
+
+  const registeredIds = useMemo(() => new Set(entries.map((e) => e.pokemonId)), [entries])
+
+  // ④手動対応分を含めたゲームタイトル一覧(絞り込みのプルダウン・手動登録画面の候補用)。
+  // 発売順の降順(新しいタイトルが上)で並べる
+  const gameTitles = useMemo(() => {
+    const set = new Set(allGameTitles())
+    for (const [t, ids] of Object.entries(titleOverrides)) {
+      if (ids.length > 0) set.add(t)
+    }
+    return sortTitlesByReleaseOrder([...set], 'desc')
+  }, [titleOverrides])
+
+  const visibleEntries = useMemo(() => {
+    const q = search.trim()
+    let list = entries.filter((entry) => {
+      const pokemon = getPokemon(entry.pokemonId)
+
+      if (
+        titleFilter &&
+        !(pokemon ? getEffectiveGameTitles(pokemon, titleOverrides).includes(titleFilter) : false)
+      ) {
+        return false
+      }
+
+      if (statusFilter !== 'all') {
+        const allObtained = entry.ballStatuses.every((b) => b.status === '入手済み')
+        if (statusFilter === '入手済み' && !allObtained) return false
+        if (statusFilter === '未入手' && allObtained) return false
+      }
+
+      if (q) {
+        const matchesPokemon =
+          pokemon !== undefined &&
+          (pokemon.name.includes(q) ||
+            displayName(pokemon).includes(q) ||
+            String(pokemon.nationalNo).includes(q))
+        const matchesBall = entry.ballStatuses.some((b) => b.ballType.includes(q))
+        if (!matchesPokemon && !matchesBall) return false
+      }
+
+      return true
+    })
+
+    // sortがnull(デフォルト)の場合は元の登録順のまま並び替えない
+    if (sort) {
+      const { column, direction } = sort
+      list = [...list].sort((a, b) => {
+        const pa = getPokemon(a.pokemonId)
+        const pb = getPokemon(b.pokemonId)
+        const cmp =
+          column === 'name'
+            ? (pa ? displayName(pa) : '').localeCompare(pb ? displayName(pb) : '', 'ja')
+            : (pa?.nationalNo ?? 0) - (pb?.nationalNo ?? 0)
+        return direction === 'asc' ? cmp : -cmp
+      })
+    }
+
+    return list
+  }, [entries, search, statusFilter, titleFilter, sort, titleOverrides])
+
+  // 絞り込み・並び替えが変わると一覧上の全国No.の並びの意味が変わるため、
+  // 100番台ジャンプボタンが覚えている「直前のジャンプ先」は無効化して実測し直す
+  useEffect(() => {
+    lastJumpNoRef.current = null
+  }, [search, statusFilter, titleFilter, sort])
+
+  const selectedEntry = entries.find((e) => e.id === selectedEntryId) ?? null
+
+  const handleRegisterSingle = (pokemon: PokemonMaster, note: string) => {
+    setEntries((prev) => [...prev, createEntry(pokemon.id, note)])
+  }
+
+  const handleRegisterBulk = (pokemons: PokemonMaster[]) => {
+    setEntries((prev) => [...prev, ...pokemons.map((p) => createEntry(p.id, ''))])
+  }
+
+  const handleToggleBallForEntry = (
+    entryId: string,
+    ballType: OshaboEntry['ballStatuses'][number]['ballType'],
+  ) => {
+    setEntries((prev) =>
+      prev.map((e) =>
+        e.id !== entryId
+          ? e
+          : {
+              ...e,
+              ballStatuses: e.ballStatuses.map((bs) =>
+                bs.ballType === ballType
+                  ? { ...bs, status: bs.status === '未入手' ? '入手済み' : '未入手' }
+                  : bs,
+              ),
+            },
+      ),
+    )
+  }
+
+  // 詳細モーダル用(選択中エントリに対する切り替え)
+  const handleToggleBall = (ballType: OshaboEntry['ballStatuses'][number]['ballType']) => {
+    if (!selectedEntry) return
+    handleToggleBallForEntry(selectedEntry.id, ballType)
+  }
+
+  const handleSaveDetail = (updates: { pokemonId: string; note: string | null }) => {
+    if (!selectedEntry) return
+    setEntries((prev) =>
+      prev.map((e) => (e.id !== selectedEntry.id ? e : { ...e, ...updates })),
+    )
+  }
+
+  const handleDelete = () => {
+    if (!selectedEntry) return
+    setEntries((prev) => prev.filter((e) => e.id !== selectedEntry.id))
+    setSelectedEntryId(null)
+  }
+
+  const handleSortColumnClick = (column: SortColumn) => {
+    setSort((prev) => nextSortState(prev, column))
+  }
+
+  const handleClearFilters = () => {
+    setSearch('')
+    setStatusFilter('all')
+    setTitleFilter('')
+  }
+
+  const handleSaveTitleOverride = (title: string, pokemonIds: string[]) => {
+    setTitleOverrides((prev) => setTitleMembers(prev, title, pokemonIds))
+  }
+
+  /** 現在レンダリングされている(表示中の幅に対応する)行要素のみを取得する */
+  const getVisibleRows = (): HTMLElement[] => {
+    return Array.from(document.querySelectorAll<HTMLElement>('[data-national-no]')).filter(
+      (el) => el.offsetParent !== null,
+    )
+  }
+
+  // ジャンプ後、対象行の上端と画面上部固定欄の間に空ける余白(px)。
+  // 「現在どの行が先頭に見えているか」の判定にも同じ値を使い、境界をぶれさせない。
+  const STICKY_GAP = 8
+
+  /**
+   * 画面上部固定欄に隠れずに完全に見えている先頭行の全国No.を取得する。
+   * (見出しの下からわずかに顔を出しているだけの行は「先頭」とみなさない)
+   */
+  const findTopVisibleNationalNo = (rows: HTMLElement[]): number | null => {
+    const boundary = headerHeight + STICKY_GAP - 1
+    for (const el of rows) {
+      if (el.getBoundingClientRect().top >= boundary) {
+        const n = Number(el.dataset.nationalNo)
+        return Number.isFinite(n) ? n : null
+      }
+    }
+    return null
+  }
+
+  /**
+   * ページの最上部/最下部ではなく、全国No.の百の位単位(1〜100, 101〜200, ...)で
+   * 前後のブロックの先頭付近までジャンプする。
+   * ・下ボタンは常に「次の100番台」の先頭へ移動する。
+   * ・上ボタンは、現在位置がそのブロックの先頭ちょうどでなければまずそのブロックの先頭へ戻り、
+   *   すでに先頭にいる場合のみひとつ前のブロックへ移動する(音楽プレーヤーの「前へ」ボタンと同じ挙動)。
+   *
+   * スムーススクロールのアニメーションが終わる前に連続でクリックされると、
+   * その瞬間の(アニメーション途中の中途半端な)スクロール位置を測ってしまい、
+   * 同じ移動先を再計算して「2回目以降が効かない」ように見えることがあった。
+   * そのため、直前に自分でジャンプさせた先(lastJumpNoRef)を覚えておき、
+   * その後ユーザーが手動でスクロールしていなければ実測ではなくその値を基準にする。
+   */
+  const handleJumpByHundred = (direction: 'up' | 'down') => {
+    const rows = getVisibleRows()
+    if (rows.length === 0) return
+
+    const liveNo = findTopVisibleNationalNo(rows) ?? 1
+    const currentNo =
+      !userScrolledRef.current && lastJumpNoRef.current !== null ? lastJumpNoRef.current : liveNo
+
+    const currentBlockIndex = Math.floor((currentNo - 1) / 100)
+    const blockStartNo = currentBlockIndex * 100 + 1
+
+    const targetNo =
+      direction === 'down'
+        ? (currentBlockIndex + 1) * 100 + 1
+        : currentNo > blockStartNo
+          ? blockStartNo
+          : Math.max(1, blockStartNo - 100)
+
+    let targetEl = rows.find((el) => {
+      const n = Number(el.dataset.nationalNo)
+      return Number.isFinite(n) && n >= targetNo
+    })
+    if (!targetEl) {
+      targetEl = direction === 'down' ? rows[rows.length - 1] : rows[0]
+    }
+
+    lastJumpNoRef.current = targetNo
+    userScrolledRef.current = false
+    isProgrammaticScrollRef.current = true
+
+    const y = targetEl.getBoundingClientRect().top + window.scrollY - headerHeight - STICKY_GAP
+    window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' })
+
+    const clearProgrammaticFlag = () => {
+      isProgrammaticScrollRef.current = false
+    }
+    if ('onscrollend' in window) {
+      window.addEventListener('scrollend', clearProgrammaticFlag, { once: true })
+    } else {
+      setTimeout(clearProgrammaticFlag, 1000)
+    }
+  }
+
+  const handleImportFile = async (file: File) => {
+    try {
+      const text = await file.text()
+      const imported = parseImportedEntries(text)
+      setEntries(imported)
+      window.alert(`${imported.length}件のデータをインポートしました。`)
+    } catch (err) {
+      window.alert(`インポートに失敗しました: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-4xl px-4 py-6">
+      <div ref={headerRef} className="sticky top-0 z-20 bg-white pb-2 dark:bg-gray-900">
+        <h1 className="mb-4 text-xl font-bold">オシャボ管理</h1>
+
+        <Toolbar
+          search={search}
+          onSearchChange={setSearch}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          titleFilter={titleFilter}
+          onTitleFilterChange={setTitleFilter}
+          gameTitles={gameTitles}
+          onClearFilters={handleClearFilters}
+          onOpenRegister={() => setShowRegister(true)}
+          onOpenBulkRegister={() => setShowBulkRegister(true)}
+          onOpenTitleCuration={() => setShowTitleCuration(true)}
+          onExport={() => exportEntriesToFile(entries)}
+          onImportFile={handleImportFile}
+        />
+      </div>
+
+      <PokemonTable
+        entries={visibleEntries}
+        onSelect={(e) => setSelectedEntryId(e.id)}
+        sort={sort}
+        onSortColumnClick={handleSortColumnClick}
+        onToggleBall={(entry, ballType) => handleToggleBallForEntry(entry.id, ballType)}
+        headerOffset={headerHeight}
+      />
+
+      {showRegister && (
+        <RegisterModal onClose={() => setShowRegister(false)} onSubmit={handleRegisterSingle} />
+      )}
+      {showBulkRegister && (
+        <BulkRegisterModal
+          onClose={() => setShowBulkRegister(false)}
+          onSubmit={handleRegisterBulk}
+          registeredIds={registeredIds}
+        />
+      )}
+      {showTitleCuration && (
+        <TitleCurationModal
+          onClose={() => setShowTitleCuration(false)}
+          allTitles={gameTitles}
+          overrides={titleOverrides}
+          onSave={handleSaveTitleOverride}
+        />
+      )}
+      {selectedEntry && (
+        <DetailModal
+          entry={selectedEntry}
+          onClose={() => setSelectedEntryId(null)}
+          onToggleBall={handleToggleBall}
+          onSave={handleSaveDetail}
+          onDelete={handleDelete}
+        />
+      )}
+
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2">
+        <button
+          type="button"
+          aria-label="前の100番台へ"
+          title="前の100番台へ"
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-500 text-white shadow-lg hover:bg-sky-600"
+          onClick={() => handleJumpByHundred('up')}
+        >
+          ▲
+        </button>
+        <button
+          type="button"
+          aria-label="次の100番台へ"
+          title="次の100番台へ"
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-500 text-white shadow-lg hover:bg-sky-600"
+          onClick={() => handleJumpByHundred('down')}
+        >
+          ▼
+        </button>
+      </div>
+    </div>
+  )
+}
