@@ -47,8 +47,13 @@ export interface PokemonMaster {
   hiddenAbility: string | null
   /** そのポケモンが野生で登場する(=捕獲できる)ゲームタイトル一覧 */
   gameTitles: string[]
-  /** 画像表示用のPokéAPI内部ID(スプライト取得に使用。フォルム違いは別IDを持つ) */
-  spriteId: number
+  /**
+   * 画像表示用のPokéAPI内部ID(スプライト取得に使用。フォルム違いは別IDを持つ)。
+   * リージョンフォームや「バラエティ」扱いのフォルムは数値IDだが、色違いなど
+   * PokéAPI上で見た目のみの「フォルム」扱いのものは「669-yellow」のような
+   * 数値+サフィックスの文字列IDになる場合がある。
+   */
+  spriteId: number | string
 }
 
 /**

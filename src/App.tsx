@@ -63,6 +63,9 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [titleFilter, setTitleFilter] = useState('')
   const [sort, setSort] = useState<SortState>(null)
+  // 「編集」ボタンで開閉するドロワー(登録・エクスポート等)の開閉状態。
+  // 一覧の行に表示する「一括入手済み/未入手切替」スイッチも、このモードがONの間だけ表示する。
+  const [editMode, setEditMode] = useState(false)
 
   const [showRegister, setShowRegister] = useState(false)
   const [showBulkRegister, setShowBulkRegister] = useState(false)
@@ -300,6 +303,36 @@ export default function App() {
     apiCreateEntry(newEntry).catch((err: unknown) => notifySaveError('オシャボ入手状況', err))
   }
 
+  // 編集モード用: 対象ポケモン1匹分のオシャボ11種すべてを一括で入手済み/未入手に切り替える。
+  // (初期値登録時に「すべて未入手→すべて入手済み」へ切り替える対象が多いための一括操作)
+  const handleBulkToggleForEntry = (entryId: string, makeAllObtained: boolean) => {
+    const newStatus = makeAllObtained ? ('入手済み' as const) : ('未入手' as const)
+    const existing = entries.find((e) => e.id === entryId)
+
+    if (existing) {
+      const newBallStatuses = existing.ballStatuses.map((bs) => ({ ...bs, status: newStatus }))
+      setEntries((prev) => prev.map((e) => (e.id === entryId ? { ...e, ballStatuses: newBallStatuses } : e)))
+      apiUpdateEntry(entryId, { ballStatuses: newBallStatuses }).catch((err: unknown) =>
+        notifySaveError('オシャボ入手状況', err),
+      )
+      return
+    }
+
+    // まだD1上に実体がない(マスタ由来のデフォルト表示行)場合は、この操作をきっかけに実エントリを新規作成する。
+    const pokemon = getPokemon(entryId)
+    if (!pokemon) return
+    const newBallStatuses = createInitialBallStatuses().map((bs) => ({ ...bs, status: newStatus }))
+    const newEntry: OshaboEntry = {
+      id: pokemon.id,
+      pokemonId: pokemon.id,
+      note: null,
+      createdAt: new Date().toISOString(),
+      ballStatuses: newBallStatuses,
+    }
+    setEntries((prev) => [...prev, newEntry])
+    apiCreateEntry(newEntry).catch((err: unknown) => notifySaveError('オシャボ入手状況', err))
+  }
+
   // 詳細モーダル用(選択中エントリに対する切り替え)
   const handleToggleBall = (ballType: OshaboEntry['ballStatuses'][number]['ballType']) => {
     if (!selectedEntry) return
@@ -523,6 +556,8 @@ export default function App() {
           onTitleFilterChange={setTitleFilter}
           gameTitleGroups={gameTitleGroups}
           onClearFilters={handleClearFilters}
+          editMode={editMode}
+          onToggleEditMode={() => setEditMode((v) => !v)}
           onOpenRegister={() => setShowRegister(true)}
           onOpenBulkRegister={() => setShowBulkRegister(true)}
           onOpenTitleCuration={() => setShowTitleCuration(true)}
@@ -537,6 +572,8 @@ export default function App() {
         sort={sort}
         onSortColumnClick={handleSortColumnClick}
         onToggleBall={(entry, ballType) => handleToggleBallForEntry(entry.id, ballType)}
+        editMode={editMode}
+        onBulkToggle={(entry, makeAllObtained) => handleBulkToggleForEntry(entry.id, makeAllObtained)}
         headerOffset={headerHeight}
       />
 

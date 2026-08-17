@@ -16,7 +16,7 @@ interface PokemonMasterRow {
   hatch_steps: number
   hidden_ability: string | null
   game_titles: string
-  sprite_id: number
+  sprite_id: number | string
 }
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {

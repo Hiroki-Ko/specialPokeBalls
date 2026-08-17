@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import type { StatusFilter } from '../App'
 import type { GameTitleGroup } from '../utils/gameTitleGroups'
 
@@ -11,6 +10,9 @@ interface Props {
   onTitleFilterChange: (v: string) => void
   gameTitleGroups: GameTitleGroup[]
   onClearFilters: () => void
+  /** 「編集」ボタンで開閉するドロワー(登録・エクスポート等)の開閉状態。一覧側の一括切替スイッチの表示条件も兼ねるため、Appで一元管理する */
+  editMode: boolean
+  onToggleEditMode: () => void
   onOpenRegister: () => void
   onOpenBulkRegister: () => void
   onOpenTitleCuration: () => void
@@ -32,13 +34,15 @@ export default function Toolbar({
   onTitleFilterChange,
   gameTitleGroups,
   onClearFilters,
+  editMode,
+  onToggleEditMode,
   onOpenRegister,
   onOpenBulkRegister,
   onOpenTitleCuration,
   onExport,
   onImportFile,
 }: Props) {
-  const [actionsOpen, setActionsOpen] = useState(false)
+  const actionsOpen = editMode
   const hasActiveFilters = search !== '' || statusFilter !== 'all' || titleFilter !== ''
 
   return (
@@ -91,7 +95,7 @@ export default function Toolbar({
               ? 'border-indigo-600 bg-indigo-600 text-white'
               : 'border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800'
           }`}
-          onClick={() => setActionsOpen((v) => !v)}
+          onClick={onToggleEditMode}
           aria-expanded={actionsOpen}
         >
           編集 {actionsOpen ? '▲' : '▼'}

@@ -9,6 +9,10 @@ interface Props {
   sort: SortState
   onSortColumnClick: (column: SortColumn) => void
   onToggleBall: (entry: OshaboEntry, ballType: BallType) => void
+  /** 編集モード(Toolbarの「編集」ドロワー開閉状態)。ONの間だけ一括切替スイッチを表示する */
+  editMode: boolean
+  /** 対象エントリのオシャボ11種すべてを一括で入手済み(true)/未入手(false)に切り替える */
+  onBulkToggle: (entry: OshaboEntry, makeAllObtained: boolean) => void
   /** 画面上部に固定表示されるタイトル・絞り込み欄の実測の高さ(px)。一覧見出しをその直下に固定するために使う */
   headerOffset: number
 }
@@ -54,6 +58,42 @@ function BallIcons({
   )
 }
 
+/**
+ * 編集モード専用。対象ポケモンのオシャボ11種すべてを一括で入手済み/未入手に切り替えるスイッチ。
+ * 全種入手済みの場合のみON表示、それ以外(未入手のみ・一部だけ入手済み)はOFF表示。
+ * OFF→ON: 全種を入手済みに、ON→OFF: 全種を未入手に戻す。
+ */
+function BulkToggleSwitch({
+  entry,
+  onBulkToggle,
+}: {
+  entry: OshaboEntry
+  onBulkToggle: (entry: OshaboEntry, makeAllObtained: boolean) => void
+}) {
+  const allObtained = entry.ballStatuses.every((bs) => bs.status === '入手済み')
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={allObtained}
+      title={allObtained ? 'クリックで全て未入手に戻す' : 'クリックで全種を入手済みにする'}
+      onClick={(e) => {
+        e.stopPropagation()
+        onBulkToggle(entry, !allObtained)
+      }}
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${
+        allObtained ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'
+      }`}
+    >
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+          allObtained ? 'translate-x-6' : 'translate-x-1'
+        }`}
+      />
+    </button>
+  )
+}
+
 /** PC表示専用。フォルム名がある場合は()内を強制的に2行目へ折り返す(横に長くなり過ぎるのを防ぐ) */
 function PokemonNameCell({ pokemon, fallback }: { pokemon: PokemonMaster | undefined; fallback: string }) {
   if (!pokemon) return <span className="truncate">{fallback}</span>
@@ -79,6 +119,8 @@ export default function PokemonTable({
   sort,
   onSortColumnClick,
   onToggleBall,
+  editMode,
+  onBulkToggle,
   headerOffset,
 }: Props) {
   if (entries.length === 0) {
@@ -101,6 +143,7 @@ export default function PokemonTable({
           <col className="w-10" />
           <col className="w-24" />
           <col className="w-40" />
+          {editMode && <col className="w-14" />}
           <col />
         </colgroup>
         <thead>
@@ -114,6 +157,11 @@ export default function PokemonTable({
               ポケモン
               <SortIndicator column="name" sort={sort} />
             </th>
+            {editMode && (
+              <th className={thBase} style={stickyStyle}>
+                一括
+              </th>
+            )}
             <th className={thBase} style={stickyStyle}>
               オシャボ進捗
             </th>
@@ -146,6 +194,11 @@ export default function PokemonTable({
                 <td className="py-2 pr-2">
                   <PokemonNameCell pokemon={pokemon} fallback={`(不明: ${entry.pokemonId})`} />
                 </td>
+                {editMode && (
+                  <td className="py-2 pr-2">
+                    <BulkToggleSwitch entry={entry} onBulkToggle={onBulkToggle} />
+                  </td>
+                )}
                 <td className="py-2 pr-2">
                   <BallIcons entry={entry} onToggleBall={onToggleBall} size="h-10 w-10" />
                 </td>
@@ -206,6 +259,7 @@ export default function PokemonTable({
                     {pokemon ? displayName(pokemon) : `(不明: ${entry.pokemonId})`}
                   </div>
                 </div>
+                {editMode && <BulkToggleSwitch entry={entry} onBulkToggle={onBulkToggle} />}
               </div>
 
               <div className="mt-2">

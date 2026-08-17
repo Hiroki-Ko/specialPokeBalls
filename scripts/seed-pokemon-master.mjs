@@ -81,7 +81,10 @@ for (const p of data) {
         sqlNumber(p.hatchSteps),
         sqlString(p.hiddenAbility),
         sqlString(JSON.stringify(p.gameTitles ?? [])),
-        sqlNumber(p.spriteId),
+        // spriteIdは基本的に数値だが、色違いなどPokéAPI上「フォルム」扱いのものは
+        // 「669-yellow」のような文字列IDになる場合があるため、文字列として書き出す
+        // (SQLiteのINTEGER型アフィニティは数値化できない文字列をそのままTEXTとして格納するため問題ない)。
+        sqlString(p.spriteId),
       ].join(', ') +
       ');',
   )

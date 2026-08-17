@@ -44,7 +44,10 @@ CREATE TABLE IF NOT EXISTS pokemon_master (
   hatch_steps INTEGER NOT NULL,
   hidden_ability TEXT,
   game_titles TEXT NOT NULL,
-  sprite_id INTEGER NOT NULL
+  -- 基本的に数値だが、色違いなどPokéAPI上「フォルム」扱いのものは
+  -- 「669-yellow」のような文字列IDになる場合があるためTEXTとする
+  -- (SQLiteの型アフィニティ上、数値のみのIDでも問題なく格納できる)。
+  sprite_id TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_pokemon_master_national_no ON pokemon_master(national_no);
