@@ -64,8 +64,12 @@ export default function App() {
   const [titleFilter, setTitleFilter] = useState('')
   const [sort, setSort] = useState<SortState>(null)
   // 「編集」ボタンで開閉するドロワー(登録・エクスポート等)の開閉状態。
-  // 一覧の行に表示する「一括入手済み/未入手切替」スイッチも、このモードがONの間だけ表示する。
   const [editMode, setEditMode] = useState(false)
+  // 一覧の行に表示する「一括入手済み/未入手切替」スイッチの表示状態。
+  // 以前は編集ドロワーの開閉と連動していたが、スイッチを使うためだけに
+  // 登録ボタン等を含む大きなドロワーを開く必要があり、モバイルで画面の大部分が
+  // 隠れてしまう問題があったため、独立したON/OFFに分離した。
+  const [bulkToggleMode, setBulkToggleMode] = useState(false)
 
   const [showRegister, setShowRegister] = useState(false)
   const [showBulkRegister, setShowBulkRegister] = useState(false)
@@ -139,6 +143,29 @@ export default function App() {
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
+
+  // 100番台ジャンプボタンの表示制御: ページの最上部・最下部にいる間はボタンを隠す
+  // (最上部で「前へ」、最下部で「次へ」を押しても意味がないため)。
+  // 少しでもスクロールしてどちらの端からも離れたら再表示する。
+  const [showJumpButtons, setShowJumpButtons] = useState(false)
+
+  const updateJumpButtonsVisibility = useRef(() => {
+    const EDGE_THRESHOLD = 4 // px。端判定に多少の遊びを持たせる
+    const scrollY = window.scrollY
+    const atTop = scrollY <= EDGE_THRESHOLD
+    const atBottom = scrollY + window.innerHeight >= document.documentElement.scrollHeight - EDGE_THRESHOLD
+    setShowJumpButtons(!atTop && !atBottom)
+  }).current
+
+  useEffect(() => {
+    updateJumpButtonsVisibility()
+    window.addEventListener('scroll', updateJumpButtonsVisibility, { passive: true })
+    window.addEventListener('resize', updateJumpButtonsVisibility)
+    return () => {
+      window.removeEventListener('scroll', updateJumpButtonsVisibility)
+      window.removeEventListener('resize', updateJumpButtonsVisibility)
+    }
+  }, [updateJumpButtonsVisibility])
 
   const registeredIds = useMemo(() => new Set(entries.map((e) => e.pokemonId)), [entries])
 
@@ -243,10 +270,13 @@ export default function App() {
   }, [allDisplayEntries, search, statusFilter, titleFilter, sort, titleOverrides, gameTitleGroups])
 
   // 絞り込み・並び替えが変わると一覧上の全国No.の並びの意味が変わるため、
-  // 100番台ジャンプボタンが覚えている「直前のジャンプ先」は無効化して実測し直す
+  // 100番台ジャンプボタンが覚えている「直前のジャンプ先」は無効化して実測し直す。
+  // また、絞り込みで一覧の高さ自体が変わり、スクロールせずとも最上部/最下部の
+  // 判定が変わる場合があるため、ジャンプボタンの表示状態も併せて再計算する。
   useEffect(() => {
     lastJumpNoRef.current = null
-  }, [search, statusFilter, titleFilter, sort])
+    updateJumpButtonsVisibility()
+  }, [search, statusFilter, titleFilter, sort, updateJumpButtonsVisibility])
 
   const selectedEntry = allDisplayEntries.find((e) => e.id === selectedEntryId) ?? null
 
@@ -558,6 +588,8 @@ export default function App() {
           onClearFilters={handleClearFilters}
           editMode={editMode}
           onToggleEditMode={() => setEditMode((v) => !v)}
+          bulkToggleMode={bulkToggleMode}
+          onToggleBulkToggleMode={() => setBulkToggleMode((v) => !v)}
           onOpenRegister={() => setShowRegister(true)}
           onOpenBulkRegister={() => setShowBulkRegister(true)}
           onOpenTitleCuration={() => setShowTitleCuration(true)}
@@ -572,7 +604,7 @@ export default function App() {
         sort={sort}
         onSortColumnClick={handleSortColumnClick}
         onToggleBall={(entry, ballType) => handleToggleBallForEntry(entry.id, ballType)}
-        editMode={editMode}
+        bulkToggleMode={bulkToggleMode}
         onBulkToggle={(entry, makeAllObtained) => handleBulkToggleForEntry(entry.id, makeAllObtained)}
         headerOffset={headerHeight}
       />
@@ -609,11 +641,20 @@ export default function App() {
         />
       )}
 
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2">
+      {/* ページの最上部・最下部にいる間は非表示(押しても意味がないため)。
+          少しでもスクロールして端から離れると再表示する。完全に消すのではなく
+          transitionで滑らかにフェード+クリック無効化することで、表示の変化が唐突にならないようにしている */}
+      <div
+        className={`fixed bottom-6 right-6 z-50 flex flex-col gap-2 transition-opacity duration-200 ${
+          showJumpButtons ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+        aria-hidden={!showJumpButtons}
+      >
         <button
           type="button"
           aria-label="前の100番台へ"
           title="前の100番台へ"
+          tabIndex={showJumpButtons ? 0 : -1}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-500 text-white shadow-lg hover:bg-sky-600"
           onClick={() => handleJumpByHundred('up')}
         >
@@ -623,6 +664,7 @@ export default function App() {
           type="button"
           aria-label="次の100番台へ"
           title="次の100番台へ"
+          tabIndex={showJumpButtons ? 0 : -1}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-500 text-white shadow-lg hover:bg-sky-600"
           onClick={() => handleJumpByHundred('down')}
         >

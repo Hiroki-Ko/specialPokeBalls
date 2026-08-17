@@ -9,8 +9,8 @@ interface Props {
   sort: SortState
   onSortColumnClick: (column: SortColumn) => void
   onToggleBall: (entry: OshaboEntry, ballType: BallType) => void
-  /** 編集モード(Toolbarの「編集」ドロワー開閉状態)。ONの間だけ一括切替スイッチを表示する */
-  editMode: boolean
+  /** 一括切替スイッチの表示状態。Toolbarの「編集」ドロワーとは独立したON/OFF */
+  bulkToggleMode: boolean
   /** 対象エントリのオシャボ11種すべてを一括で入手済み(true)/未入手(false)に切り替える */
   onBulkToggle: (entry: OshaboEntry, makeAllObtained: boolean) => void
   /** 画面上部に固定表示されるタイトル・絞り込み欄の実測の高さ(px)。一覧見出しをその直下に固定するために使う */
@@ -59,7 +59,7 @@ function BallIcons({
 }
 
 /**
- * 編集モード専用。対象ポケモンのオシャボ11種すべてを一括で入手済み/未入手に切り替えるスイッチ。
+ * 一括切替モード専用。対象ポケモンのオシャボ11種すべてを一括で入手済み/未入手に切り替えるスイッチ。
  * 全種入手済みの場合のみON表示、それ以外(未入手のみ・一部だけ入手済み)はOFF表示。
  * OFF→ON: 全種を入手済みに、ON→OFF: 全種を未入手に戻す。
  */
@@ -119,7 +119,7 @@ export default function PokemonTable({
   sort,
   onSortColumnClick,
   onToggleBall,
-  editMode,
+  bulkToggleMode,
   onBulkToggle,
   headerOffset,
 }: Props) {
@@ -143,7 +143,7 @@ export default function PokemonTable({
           <col className="w-10" />
           <col className="w-24" />
           <col className="w-40" />
-          {editMode && <col className="w-14" />}
+          {bulkToggleMode && <col className="w-14" />}
           <col />
         </colgroup>
         <thead>
@@ -157,7 +157,7 @@ export default function PokemonTable({
               ポケモン
               <SortIndicator column="name" sort={sort} />
             </th>
-            {editMode && (
+            {bulkToggleMode && (
               <th className={thBase} style={stickyStyle}>
                 一括
               </th>
@@ -194,7 +194,7 @@ export default function PokemonTable({
                 <td className="py-2 pr-2">
                   <PokemonNameCell pokemon={pokemon} fallback={`(不明: ${entry.pokemonId})`} />
                 </td>
-                {editMode && (
+                {bulkToggleMode && (
                   <td className="py-2 pr-2">
                     <BulkToggleSwitch entry={entry} onBulkToggle={onBulkToggle} />
                   </td>
@@ -259,7 +259,7 @@ export default function PokemonTable({
                     {pokemon ? displayName(pokemon) : `(不明: ${entry.pokemonId})`}
                   </div>
                 </div>
-                {editMode && <BulkToggleSwitch entry={entry} onBulkToggle={onBulkToggle} />}
+                {bulkToggleMode && <BulkToggleSwitch entry={entry} onBulkToggle={onBulkToggle} />}
               </div>
 
               <div className="mt-2">

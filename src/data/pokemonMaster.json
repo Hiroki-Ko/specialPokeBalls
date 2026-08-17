@@ -2399,7 +2399,9 @@
       "ソード",
       "シールド",
       "ブリリアントダイヤモンド",
-      "シャイニングパール"
+      "シャイニングパール",
+      "スカーレット",
+      "バイオレット"
     ],
     "spriteId": 128
   },
@@ -2499,55 +2501,6 @@
       "シャイニングパール"
     ],
     "spriteId": 131
-  },
-  {
-    "id": "ditto",
-    "nationalNo": 132,
-    "name": "メタモン",
-    "formName": null,
-    "eggGroups": [
-      "メタモン"
-    ],
-    "hatchSteps": 5355,
-    "hiddenAbility": "かわりもの",
-    "gameTitles": [
-      "赤",
-      "緑",
-      "青",
-      "ピカチュウ",
-      "金",
-      "銀",
-      "クリスタル",
-      "エメラルド",
-      "ファイアレッド",
-      "リーフグリーン",
-      "ダイヤモンド",
-      "パール",
-      "プラチナ",
-      "ハートゴールド",
-      "ソウルシルバー",
-      "ブラック",
-      "ホワイト",
-      "ブラック2",
-      "ホワイト2",
-      "X",
-      "Y",
-      "オメガルビー",
-      "アルファサファイア",
-      "サン",
-      "ムーン",
-      "ウルトラサン",
-      "ウルトラムーン",
-      "Let's Go! ピカチュウ",
-      "Let's Go! イーブイ",
-      "ソード",
-      "シールド",
-      "スカーレット",
-      "バイオレット",
-      "ブリリアントダイヤモンド",
-      "シャイニングパール"
-    ],
-    "spriteId": 132
   },
   {
     "id": "eevee",
@@ -7306,49 +7259,6 @@
     "spriteId": 479
   },
   {
-    "id": "phione",
-    "nationalNo": 489,
-    "name": "フィオネ",
-    "formName": null,
-    "eggGroups": [
-      "すいちゅう1",
-      "ようせい"
-    ],
-    "hatchSteps": 10455,
-    "hiddenAbility": null,
-    "gameTitles": [
-      "スカーレット",
-      "バイオレット",
-      "Legends アルセウス",
-      "ブリリアントダイヤモンド",
-      "シャイニングパール"
-    ],
-    "spriteId": 489
-  },
-  {
-    "id": "manaphy",
-    "nationalNo": 490,
-    "name": "マナフィ",
-    "formName": null,
-    "eggGroups": [
-      "すいちゅう1",
-      "ようせい"
-    ],
-    "hatchSteps": 2805,
-    "hiddenAbility": null,
-    "gameTitles": [
-      "ダイヤモンド",
-      "パール",
-      "プラチナ",
-      "ハートゴールド",
-      "ソウルシルバー",
-      "スカーレット",
-      "バイオレット",
-      "Legends アルセウス"
-    ],
-    "spriteId": 490
-  },
-  {
     "id": "snivy",
     "nationalNo": 495,
     "name": "ツタージャ",
@@ -10242,26 +10152,6 @@
     "spriteId": 771
   },
   {
-    "id": "type-null",
-    "nationalNo": 772,
-    "name": "タイプ：ヌル",
-    "formName": null,
-    "eggGroups": [
-      "タマゴみはっけん"
-    ],
-    "hatchSteps": 30855,
-    "hiddenAbility": null,
-    "gameTitles": [
-      "サン",
-      "ムーン",
-      "ウルトラサン",
-      "ウルトラムーン",
-      "ソード",
-      "シールド"
-    ],
-    "spriteId": 772
-  },
-  {
     "id": "minior-red-meteor",
     "nationalNo": 774,
     "name": "メテノ",
@@ -10442,46 +10332,6 @@
       "バイオレット"
     ],
     "spriteId": 782
-  },
-  {
-    "id": "cosmog",
-    "nationalNo": 789,
-    "name": "コスモッグ",
-    "formName": null,
-    "eggGroups": [
-      "タマゴみはっけん"
-    ],
-    "hatchSteps": 30855,
-    "hiddenAbility": null,
-    "gameTitles": [
-      "サン",
-      "ムーン",
-      "ウルトラサン",
-      "ウルトラムーン",
-      "ソード",
-      "シールド",
-      "スカーレット",
-      "バイオレット"
-    ],
-    "spriteId": 789
-  },
-  {
-    "id": "poipole",
-    "nationalNo": 803,
-    "name": "ベベノム",
-    "formName": null,
-    "eggGroups": [
-      "タマゴみはっけん"
-    ],
-    "hatchSteps": 30855,
-    "hiddenAbility": null,
-    "gameTitles": [
-      "ウルトラサン",
-      "ウルトラムーン",
-      "ソード",
-      "シールド"
-    ],
-    "spriteId": 803
   },
   {
     "id": "grookey",
@@ -11080,24 +10930,6 @@
       "バイオレット"
     ],
     "spriteId": 885
-  },
-  {
-    "id": "kubfu",
-    "nationalNo": 891,
-    "name": "ダクマ",
-    "formName": null,
-    "eggGroups": [
-      "タマゴみはっけん"
-    ],
-    "hatchSteps": 30855,
-    "hiddenAbility": null,
-    "gameTitles": [
-      "ソード",
-      "シールド",
-      "スカーレット",
-      "バイオレット"
-    ],
-    "spriteId": 891
   },
   {
     "id": "sprigatito",
@@ -11728,23 +11560,6 @@
       "Legends ZA"
     ],
     "spriteId": 996
-  },
-  {
-    "id": "gimmighoul",
-    "nationalNo": 999,
-    "name": "コレクレー",
-    "formName": null,
-    "eggGroups": [
-      "タマゴみはっけん"
-    ],
-    "hatchSteps": 13005,
-    "hiddenAbility": null,
-    "gameTitles": [
-      "スカーレット",
-      "バイオレット",
-      "Legends ZA"
-    ],
-    "spriteId": 999
   },
   {
     "id": "poltchageist",
