@@ -159,3 +159,10 @@
   - 名称整理: 旧「一括切替 ON/OFF」ボタン(`bulkToggleMode`)を「**編集 ON/OFF**」(`editMode`)に改名し、ボール切替と一括切替スイッチの両方をこのモードで制御する。旧「編集 ▼/▲」ドロワーボタン(旧`editMode`)は「**メニュー ▼/▲**」(`menuOpen`)に改名。スマホ幅でも3ボタンが1行に収まることを確認。
   - 注意: `PokemonTable`の`editMode`プロップの意味が「一括スイッチの表示」から「ボール切替+一括スイッチ」に変わった。
 - **作業環境の注記**: このセッション途中でクラウドの作業フォルダが消えたため、以降はユーザーPCのフォルダをdevice_bash経由で直接編集した。ただし**ユーザーPC上の`node_modules`はWindows用でLinux側のwrangler/workerdは動かない**ため、ビルド・lint・ローカルD1検証はソースをクラウドへコピーして実施した(`tsc -b`・`vite build`・`oxlint`合格)。
+
+## 15. ファビコンをラブラブボールに変更(2026年11月)
+
+- `index.html`の`<link rel="icon">`を、Viteの初期アイコン(`/favicon.svg`)から、一覧のボール画像と同じ出典(PokeAPI/sprites)のラブラブボール画像(`.../sprites/items/love-ball.png`)に変更。画像を自作・同梱せず既存のボール画像と同じ参照方式に揃えた。
+- トレードオフ: 外部ホスト(raw.githubusercontent.com)に依存するため、そこに接続できない環境ではタブのアイコンが表示されない(アプリ本体のボール画像も同じ依存)。確実に自前配信したい場合は、画像を`public/`に置いて`/love-ball.png`を参照する形に変えること。
+- `public/favicon.svg`は未使用になったが残してある(不要なら手動で削除可)。
+
