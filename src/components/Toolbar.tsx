@@ -10,17 +10,18 @@ interface Props {
   onTitleFilterChange: (v: string) => void
   gameTitleGroups: GameTitleGroup[]
   onClearFilters: () => void
-  /** 「編集」ボタンで開閉するドロワー(登録・エクスポート等)の開閉状態 */
+  /** 「メニュー」ボタンで開閉するドロワー(登録・エクスポート等)の開閉状態 */
+  menuOpen: boolean
+  onToggleMenu: () => void
+  /**
+   * 一覧上の編集モード(デフォルトOFF)。ONの間だけ、
+   * ・ボールアイコンのタップで入手済み/未入手を切り替えられる
+   * ・各行に「一括入手済み/未入手切替」スイッチが表示される
+   * スクロール中に誤ってボールアイコンへ触れて状態が変わってしまうのを防ぐため、
+   * 通常はOFFにしてある。登録ボタン等を含む大きなドロワー(menuOpen)とは独立している。
+   */
   editMode: boolean
   onToggleEditMode: () => void
-  /**
-   * 一覧の各行に「一括入手済み/未入手切替」スイッチを表示するかどうか。
-   * 以前はeditModeと連動していたが、スイッチを使うためだけに登録ボタン等を含む
-   * 大きなドロワーを開く必要があり、モバイルで画面の大部分が隠れてしまっていたため、
-   * ドロワーを開かずに済む独立した小さなトグルボタンとして分離した。
-   */
-  bulkToggleMode: boolean
-  onToggleBulkToggleMode: () => void
   onOpenRegister: () => void
   onOpenBulkRegister: () => void
   onOpenTitleCuration: () => void
@@ -31,7 +32,7 @@ interface Props {
 /**
  * 3.2 検索・絞り込み、および登録・エクスポート/インポートの導線。
  * 並び替えは一覧テーブルの見出しクリックで行うため、ここには置かない。
- * 登録・エクスポート等の操作ボタンは、絞り込み欄右端の「編集」ボタンで開閉するドロワーにまとめている。
+ * 登録・エクスポート等の操作ボタンは、絞り込み欄右端の「メニュー」ボタンで開閉するドロワーにまとめている。
  */
 export default function Toolbar({
   search,
@@ -42,17 +43,17 @@ export default function Toolbar({
   onTitleFilterChange,
   gameTitleGroups,
   onClearFilters,
+  menuOpen,
+  onToggleMenu,
   editMode,
   onToggleEditMode,
-  bulkToggleMode,
-  onToggleBulkToggleMode,
   onOpenRegister,
   onOpenBulkRegister,
   onOpenTitleCuration,
   onExport,
   onImportFile,
 }: Props) {
-  const actionsOpen = editMode
+  const actionsOpen = menuOpen
   const hasActiveFilters = search !== '' || statusFilter !== 'all' || titleFilter !== ''
 
   return (
@@ -90,7 +91,7 @@ export default function Toolbar({
         </select>
 
         {/*
-          スマホ幅では「絞り込みをクリア」「一括切替」「編集」の3つを1行に収める。
+          スマホ幅では「絞り込みをクリア」「編集 ON/OFF」「メニュー」の3つを1行に収める。
           sm:contents で(sm以上では)このラッパー自体をレイアウトから消し、
           子要素を直接親のflexコンテナの一員に戻すことで、sm以上では従来通りの
           折り返しレイアウトに戻る。スマホ幅ではflex-1で3等分し、paddingとフォント
@@ -109,15 +110,15 @@ export default function Toolbar({
           <button
             type="button"
             className={`min-w-0 flex-1 truncate rounded border px-1.5 py-1.5 text-xs sm:flex-none sm:ml-auto sm:px-3 sm:text-sm ${
-              bulkToggleMode
+              editMode
                 ? 'border-indigo-600 bg-indigo-600 text-white'
                 : 'border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800'
             }`}
-            onClick={onToggleBulkToggleMode}
-            aria-pressed={bulkToggleMode}
-            title="一覧の各行に、オシャボ11種をまとめて入手済み/未入手にする切替スイッチを表示します"
+            onClick={onToggleEditMode}
+            aria-pressed={editMode}
+            title="ONの間だけ、ボールアイコンのタップで入手済み/未入手を切り替えられ、各行に一括切替スイッチが表示されます(誤タップ防止のため通常はOFF)"
           >
-            一括切替 {bulkToggleMode ? 'ON' : 'OFF'}
+            編集 {editMode ? 'ON' : 'OFF'}
           </button>
 
           <button
@@ -127,10 +128,10 @@ export default function Toolbar({
                 ? 'border-indigo-600 bg-indigo-600 text-white'
                 : 'border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800'
             }`}
-            onClick={onToggleEditMode}
+            onClick={onToggleMenu}
             aria-expanded={actionsOpen}
           >
-            編集 {actionsOpen ? '▲' : '▼'}
+            メニュー {actionsOpen ? '▲' : '▼'}
           </button>
         </div>
       </div>

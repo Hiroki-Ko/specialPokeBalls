@@ -18,6 +18,10 @@ dist-ssr
 # scripts/seed-pokemon-master.mjs が生成する一時ファイル(自動生成物のためコミット不要)
 pokemon_master_seed.sql
 
+# scripts/backup-d1.mjs (npm run d1:backup:local / :remote) が書き出すD1バックアップ。
+# 個人のポケモン収集データを含むため、リポジトリにはコミットせず手元で保管する。
+backups/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

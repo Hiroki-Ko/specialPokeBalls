@@ -1,6 +1,7 @@
 import type { OshaboEntry, BallType, PokemonMaster } from '../types'
 import { getPokemon, displayName, spriteUrl } from '../utils/pokemon'
 import { ballImageUrl } from '../utils/ballImages'
+import { kanaRowOf } from '../utils/kana'
 import type { SortColumn, SortState } from '../App'
 
 interface Props {
@@ -9,8 +10,12 @@ interface Props {
   sort: SortState
   onSortColumnClick: (column: SortColumn) => void
   onToggleBall: (entry: OshaboEntry, ballType: BallType) => void
-  /** 一括切替スイッチの表示状態。Toolbarの「編集」ドロワーとは独立したON/OFF */
-  bulkToggleMode: boolean
+  /**
+   * 編集モード(デフォルトOFF)。ONの間だけボールアイコンのタップで入手済み/未入手を切り替えられ、
+   * 一括切替スイッチも表示される。OFFの間はボールアイコンをタップしても何も切り替わらず、
+   * 行全体のクリック(詳細画面を開く)として扱われる。スクロール中の誤タップ防止のため。
+   */
+  editMode: boolean
   /** 対象エントリのオシャボ11種すべてを一括で入手済み(true)/未入手(false)に切り替える */
   onBulkToggle: (entry: OshaboEntry, makeAllObtained: boolean) => void
   /** 画面上部に固定表示されるタイトル・絞り込み欄の実測の高さ(px)。一覧見出しをその直下に固定するために使う */
@@ -26,34 +31,39 @@ function BallIcons({
   entry,
   onToggleBall,
   size,
+  editMode,
 }: {
   entry: OshaboEntry
   onToggleBall: (entry: OshaboEntry, ballType: BallType) => void
   size: string
+  /** false の間はボタンではなく表示のみ(タップは行のクリック=詳細表示に流れる) */
+  editMode: boolean
 }) {
+  const imgClass = (status: string) =>
+    `${size} object-contain transition ${status === '入手済み' ? 'opacity-100' : 'opacity-30 grayscale'}`
+
   return (
     <div className="flex flex-wrap gap-1">
-      {entry.ballStatuses.map((bs) => (
-        <button
-          key={bs.ballType}
-          type="button"
-          title={`${bs.ballType}: ${bs.status}(クリックで切り替え)`}
-          onClick={(e) => {
-            e.stopPropagation()
-            onToggleBall(entry, bs.ballType)
-          }}
-          className="shrink-0 rounded hover:ring-2 hover:ring-indigo-300"
-        >
-          <img
-            src={ballImageUrl(bs.ballType)}
-            alt={bs.ballType}
-            loading="lazy"
-            className={`${size} object-contain transition ${
-              bs.status === '入手済み' ? 'opacity-100' : 'opacity-30 grayscale'
-            }`}
-          />
-        </button>
-      ))}
+      {entry.ballStatuses.map((bs) =>
+        editMode ? (
+          <button
+            key={bs.ballType}
+            type="button"
+            title={`${bs.ballType}: ${bs.status}(クリックで切り替え)`}
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleBall(entry, bs.ballType)
+            }}
+            className="shrink-0 rounded hover:ring-2 hover:ring-indigo-300"
+          >
+            <img src={ballImageUrl(bs.ballType)} alt={bs.ballType} loading="lazy" className={imgClass(bs.status)} />
+          </button>
+        ) : (
+          <span key={bs.ballType} title={`${bs.ballType}: ${bs.status}`} className="shrink-0 rounded">
+            <img src={ballImageUrl(bs.ballType)} alt={bs.ballType} loading="lazy" className={imgClass(bs.status)} />
+          </span>
+        ),
+      )}
     </div>
   )
 }
@@ -119,7 +129,7 @@ export default function PokemonTable({
   sort,
   onSortColumnClick,
   onToggleBall,
-  bulkToggleMode,
+  editMode,
   onBulkToggle,
   headerOffset,
 }: Props) {
@@ -143,7 +153,7 @@ export default function PokemonTable({
           <col className="w-10" />
           <col className="w-24" />
           <col className="w-40" />
-          {bulkToggleMode && <col className="w-14" />}
+          {editMode && <col className="w-14" />}
           <col />
         </colgroup>
         <thead>
@@ -157,7 +167,7 @@ export default function PokemonTable({
               ポケモン
               <SortIndicator column="name" sort={sort} />
             </th>
-            {bulkToggleMode && (
+            {editMode && (
               <th className={thBase} style={stickyStyle}>
                 一括
               </th>
@@ -174,6 +184,7 @@ export default function PokemonTable({
               <tr
                 key={entry.id}
                 data-national-no={pokemon?.nationalNo}
+                data-kana-row={pokemon ? kanaRowOf(displayName(pokemon)) : undefined}
                 className="cursor-pointer border-b border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/60"
                 onClick={() => onSelect(entry)}
               >
@@ -194,13 +205,13 @@ export default function PokemonTable({
                 <td className="py-2 pr-2">
                   <PokemonNameCell pokemon={pokemon} fallback={`(不明: ${entry.pokemonId})`} />
                 </td>
-                {bulkToggleMode && (
+                {editMode && (
                   <td className="py-2 pr-2">
                     <BulkToggleSwitch entry={entry} onBulkToggle={onBulkToggle} />
                   </td>
                 )}
                 <td className="py-2 pr-2">
-                  <BallIcons entry={entry} onToggleBall={onToggleBall} size="h-10 w-10" />
+                  <BallIcons entry={entry} onToggleBall={onToggleBall} size="h-10 w-10" editMode={editMode} />
                 </td>
               </tr>
             )
@@ -238,6 +249,7 @@ export default function PokemonTable({
             <div
               key={entry.id}
               data-national-no={pokemon?.nationalNo}
+                data-kana-row={pokemon ? kanaRowOf(displayName(pokemon)) : undefined}
               className="cursor-pointer border-b border-gray-100 py-3 dark:border-gray-800"
               onClick={() => onSelect(entry)}
             >
@@ -259,11 +271,11 @@ export default function PokemonTable({
                     {pokemon ? displayName(pokemon) : `(不明: ${entry.pokemonId})`}
                   </div>
                 </div>
-                {bulkToggleMode && <BulkToggleSwitch entry={entry} onBulkToggle={onBulkToggle} />}
+                {editMode && <BulkToggleSwitch entry={entry} onBulkToggle={onBulkToggle} />}
               </div>
 
               <div className="mt-2">
-                <BallIcons entry={entry} onToggleBall={onToggleBall} size="h-6 w-6" />
+                <BallIcons entry={entry} onToggleBall={onToggleBall} size="h-6 w-6" editMode={editMode} />
               </div>
             </div>
           )

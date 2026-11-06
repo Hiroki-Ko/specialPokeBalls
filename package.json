@@ -14,7 +14,9 @@
     "d1:migrate:remote": "wrangler d1 execute DB --remote --file=schema.sql",
     "seed:pokemon-master": "node scripts/seed-pokemon-master.mjs",
     "d1:seed-master:local": "npm run seed:pokemon-master && wrangler d1 execute DB --local --file=pokemon_master_seed.sql",
-    "d1:seed-master:remote": "npm run seed:pokemon-master && wrangler d1 execute DB --remote --file=pokemon_master_seed.sql"
+    "d1:seed-master:remote": "npm run seed:pokemon-master && wrangler d1 execute DB --remote --file=pokemon_master_seed.sql",
+    "d1:backup:local": "node scripts/backup-d1.mjs",
+    "d1:backup:remote": "node scripts/backup-d1.mjs --remote"
   },
   "dependencies": {
     "react": "^19.2.8",

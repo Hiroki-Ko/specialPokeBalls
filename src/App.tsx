@@ -63,13 +63,13 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [titleFilter, setTitleFilter] = useState('')
   const [sort, setSort] = useState<SortState>(null)
-  // 「編集」ボタンで開閉するドロワー(登録・エクスポート等)の開閉状態。
+  // 「メニュー」ボタンで開閉するドロワー(登録・エクスポート等)の開閉状態。
+  const [menuOpen, setMenuOpen] = useState(false)
+  // 一覧上の編集モード(デフォルトOFF)。ONの間だけボールアイコンのタップによる
+  // 入手済み/未入手の切替と、行の「一括切替」スイッチが使える。
+  // スクロール中に誤ってボールアイコンへ触れて状態が変わってしまうのを防ぐため、
+  // 通常はOFFにしてある。大きなメニュードロワー(menuOpen)とは独立している。
   const [editMode, setEditMode] = useState(false)
-  // 一覧の行に表示する「一括入手済み/未入手切替」スイッチの表示状態。
-  // 以前は編集ドロワーの開閉と連動していたが、スイッチを使うためだけに
-  // 登録ボタン等を含む大きなドロワーを開く必要があり、モバイルで画面の大部分が
-  // 隠れてしまう問題があったため、独立したON/OFFに分離した。
-  const [bulkToggleMode, setBulkToggleMode] = useState(false)
 
   const [showRegister, setShowRegister] = useState(false)
   const [showBulkRegister, setShowBulkRegister] = useState(false)
@@ -131,6 +131,8 @@ export default function App() {
   // (アニメーション中の中途半端なスクロール位置を毎回測り直すのではなく)
   // 直前のジャンプ先を基準に確実に1ブロックずつ進められるようにする。
   const lastJumpNoRef = useRef<number | null>(null)
+  // 名前順(ア行→カ行…)ジャンプ用。直前にジャンプさせた先の「表示中の行の並びでのインデックス」
+  const lastJumpIndexRef = useRef<number | null>(null)
   const isProgrammaticScrollRef = useRef(false)
   const userScrolledRef = useRef(false)
 
@@ -275,6 +277,7 @@ export default function App() {
   // 判定が変わる場合があるため、ジャンプボタンの表示状態も併せて再計算する。
   useEffect(() => {
     lastJumpNoRef.current = null
+    lastJumpIndexRef.current = null
     updateJumpButtonsVisibility()
   }, [search, statusFilter, titleFilter, sort, updateJumpButtonsVisibility])
 
@@ -464,12 +467,58 @@ export default function App() {
     return null
   }
 
+  /** findTopVisibleNationalNo と同じ判定で、先頭に完全に見えている行の「表示順インデックス」を返す */
+  const findTopVisibleIndex = (rows: HTMLElement[]): number | null => {
+    const boundary = headerHeight + STICKY_GAP - 1
+    const idx = rows.findIndex((el) => el.getBoundingClientRect().top >= boundary)
+    return idx >= 0 ? idx : null
+  }
+
+  /**
+   * 名前順(昇順・降順どちらでも)で並んでいるときのジャンプ先を決める。
+   * 表示中の行を「ア行・カ行・サ行…」(data-kana-row)ごとの連続したブロックとして扱い、
+   * 下ボタンは次の行ブロックの先頭、上ボタンは現在ブロックの先頭(すでに先頭ならひとつ前のブロックの先頭)へ移動する。
+   * 絞り込みで存在しない行は自然に飛ばされる。戻り値は移動先の行要素。
+   */
+  const pickKanaRowTarget = (direction: 'up' | 'down', rows: HTMLElement[]): HTMLElement => {
+    const liveIndex = findTopVisibleIndex(rows) ?? 0
+    const currentIndex =
+      !userScrolledRef.current && lastJumpIndexRef.current !== null
+        ? Math.min(lastJumpIndexRef.current, rows.length - 1)
+        : liveIndex
+    const rowOf = (i: number) => rows[i].dataset.kanaRow ?? ''
+
+    let blockStart = currentIndex
+    while (blockStart > 0 && rowOf(blockStart - 1) === rowOf(currentIndex)) blockStart--
+
+    let targetIndex: number
+    if (direction === 'down') {
+      let next = currentIndex
+      while (next < rows.length && rowOf(next) === rowOf(currentIndex)) next++
+      targetIndex = next < rows.length ? next : rows.length - 1
+    } else if (currentIndex > blockStart) {
+      targetIndex = blockStart
+    } else if (blockStart === 0) {
+      targetIndex = 0
+    } else {
+      let prevStart = blockStart - 1
+      while (prevStart > 0 && rowOf(prevStart - 1) === rowOf(blockStart - 1)) prevStart--
+      targetIndex = prevStart
+    }
+
+    lastJumpIndexRef.current = targetIndex
+    return rows[targetIndex]
+  }
+
   /**
    * ページの最上部/最下部ではなく、全国No.の百の位単位(1〜100, 101〜200, ...)で
    * 前後のブロックの先頭付近までジャンプする。
    * ・下ボタンは常に「次の100番台」の先頭へ移動する。
    * ・上ボタンは、現在位置がそのブロックの先頭ちょうどでなければまずそのブロックの先頭へ戻り、
    *   すでに先頭にいる場合のみひとつ前のブロックへ移動する(音楽プレーヤーの「前へ」ボタンと同じ挙動)。
+   *
+   * 名前順で並び替えているとき(sort.column === 'name')は、100番台ではなく
+   * 「ア行→カ行→サ行…」の行単位で同じ動き(下=次の行、上=現在行の先頭→前の行)をする(pickKanaRowTarget)。
    *
    * スムーススクロールのアニメーションが終わる前に連続でクリックされると、
    * その瞬間の(アニメーション途中の中途半端な)スクロール位置を測ってしまい、
@@ -481,29 +530,35 @@ export default function App() {
     const rows = getVisibleRows()
     if (rows.length === 0) return
 
-    const liveNo = findTopVisibleNationalNo(rows) ?? 1
-    const currentNo =
-      !userScrolledRef.current && lastJumpNoRef.current !== null ? lastJumpNoRef.current : liveNo
+    let targetEl: HTMLElement | undefined
+    if (sort?.column === 'name') {
+      targetEl = pickKanaRowTarget(direction, rows)
+    } else {
+      const liveNo = findTopVisibleNationalNo(rows) ?? 1
+      const currentNo =
+        !userScrolledRef.current && lastJumpNoRef.current !== null ? lastJumpNoRef.current : liveNo
 
-    const currentBlockIndex = Math.floor((currentNo - 1) / 100)
-    const blockStartNo = currentBlockIndex * 100 + 1
+      const currentBlockIndex = Math.floor((currentNo - 1) / 100)
+      const blockStartNo = currentBlockIndex * 100 + 1
 
-    const targetNo =
-      direction === 'down'
-        ? (currentBlockIndex + 1) * 100 + 1
-        : currentNo > blockStartNo
-          ? blockStartNo
-          : Math.max(1, blockStartNo - 100)
+      const targetNo =
+        direction === 'down'
+          ? (currentBlockIndex + 1) * 100 + 1
+          : currentNo > blockStartNo
+            ? blockStartNo
+            : Math.max(1, blockStartNo - 100)
 
-    let targetEl = rows.find((el) => {
-      const n = Number(el.dataset.nationalNo)
-      return Number.isFinite(n) && n >= targetNo
-    })
-    if (!targetEl) {
-      targetEl = direction === 'down' ? rows[rows.length - 1] : rows[0]
+      targetEl = rows.find((el) => {
+        const n = Number(el.dataset.nationalNo)
+        return Number.isFinite(n) && n >= targetNo
+      })
+      if (!targetEl) {
+        targetEl = direction === 'down' ? rows[rows.length - 1] : rows[0]
+      }
+
+      lastJumpNoRef.current = targetNo
     }
 
-    lastJumpNoRef.current = targetNo
     userScrolledRef.current = false
     isProgrammaticScrollRef.current = true
 
@@ -586,10 +641,10 @@ export default function App() {
           onTitleFilterChange={setTitleFilter}
           gameTitleGroups={gameTitleGroups}
           onClearFilters={handleClearFilters}
+          menuOpen={menuOpen}
+          onToggleMenu={() => setMenuOpen((v) => !v)}
           editMode={editMode}
           onToggleEditMode={() => setEditMode((v) => !v)}
-          bulkToggleMode={bulkToggleMode}
-          onToggleBulkToggleMode={() => setBulkToggleMode((v) => !v)}
           onOpenRegister={() => setShowRegister(true)}
           onOpenBulkRegister={() => setShowBulkRegister(true)}
           onOpenTitleCuration={() => setShowTitleCuration(true)}
@@ -604,7 +659,7 @@ export default function App() {
         sort={sort}
         onSortColumnClick={handleSortColumnClick}
         onToggleBall={(entry, ballType) => handleToggleBallForEntry(entry.id, ballType)}
-        bulkToggleMode={bulkToggleMode}
+        editMode={editMode}
         onBulkToggle={(entry, makeAllObtained) => handleBulkToggleForEntry(entry.id, makeAllObtained)}
         headerOffset={headerHeight}
       />
@@ -652,8 +707,8 @@ export default function App() {
       >
         <button
           type="button"
-          aria-label="前の100番台へ"
-          title="前の100番台へ"
+          aria-label={sort?.column === 'name' ? '前の行(ア行・カ行…)へ' : '前の100番台へ'}
+          title={sort?.column === 'name' ? '前の行(ア行・カ行…)へ' : '前の100番台へ'}
           tabIndex={showJumpButtons ? 0 : -1}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-500 text-white shadow-lg hover:bg-sky-600"
           onClick={() => handleJumpByHundred('up')}
@@ -662,8 +717,8 @@ export default function App() {
         </button>
         <button
           type="button"
-          aria-label="次の100番台へ"
-          title="次の100番台へ"
+          aria-label={sort?.column === 'name' ? '次の行(ア行・カ行…)へ' : '次の100番台へ'}
+          title={sort?.column === 'name' ? '次の行(ア行・カ行…)へ' : '次の100番台へ'}
           tabIndex={showJumpButtons ? 0 : -1}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-500 text-white shadow-lg hover:bg-sky-600"
           onClick={() => handleJumpByHundred('down')}
