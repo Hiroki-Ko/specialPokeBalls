@@ -165,4 +165,5 @@
 - `index.html`の`<link rel="icon">`を、Viteの初期アイコン(`/favicon.svg`)から、一覧のボール画像と同じ出典(PokeAPI/sprites)のラブラブボール画像(`.../sprites/items/love-ball.png`)に変更。画像を自作・同梱せず既存のボール画像と同じ参照方式に揃えた。
 - トレードオフ: 外部ホスト(raw.githubusercontent.com)に依存するため、そこに接続できない環境ではタブのアイコンが表示されない(アプリ本体のボール画像も同じ依存)。確実に自前配信したい場合は、画像を`public/`に置いて`/love-ball.png`を参照する形に変えること。
 - `public/favicon.svg`は未使用になったが残してある(不要なら手動で削除可)。
+- **追補(同日)ファビコンのサイズを一般的な規格に**: 元画像が30x30pxで、さらに周囲に透明の余白があるためタブで小さく見えていた。余白をトリミングしてドット絵のまま拡大し、`public/`に自前で同梱する形に変更(外部ホスト依存も解消)。`favicon.ico`(16/32/48px)・`favicon-32x32.png`・`icon-192.png`・`apple-touch-icon.png`(180px)を`index.html`で参照。`icon-256.png`は未使用(予備)。元画像はPokeAPI/spritesの`love-ball.png`(既存のボール画像と同じ出典)。
 
