@@ -13,7 +13,15 @@ import {
   apiImportEntries,
 } from './utils/api'
 import { generateId } from './utils/id'
-import { getPokemon, displayName, allGameTitles, setPokemonMaster, POKEMON_MASTER } from './utils/pokemon'
+import {
+  getPokemon,
+  displayName,
+  allGameTitles,
+  allEggGroups,
+  allHatchSteps,
+  setPokemonMaster,
+  POKEMON_MASTER,
+} from './utils/pokemon'
 import { kanaIncludes } from './utils/kana'
 import { exportEntriesToFile, parseImportedEntries } from './utils/exportImport'
 import { sortTitlesByReleaseOrder, GAME_TITLE_RELEASE_ORDER } from './utils/gameTitleOrder'
@@ -62,6 +70,9 @@ export default function App() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [titleFilter, setTitleFilter] = useState('')
+  // タマゴグループ(''=すべて)と孵化歩数(''=すべて。数値は文字列のまま保持しselectのvalueと揃える)
+  const [eggGroupFilter, setEggGroupFilter] = useState('')
+  const [hatchStepsFilter, setHatchStepsFilter] = useState('')
   const [sort, setSort] = useState<SortState>(null)
   // 「メニュー」ボタンで開閉するドロワー(登録・エクスポート等)の開閉状態。
   const [menuOpen, setMenuOpen] = useState(false)
@@ -235,6 +246,9 @@ export default function App() {
         if (!matchesTitle) return false
       }
 
+      if (eggGroupFilter && !(pokemon?.eggGroups ?? []).includes(eggGroupFilter)) return false
+      if (hatchStepsFilter && String(pokemon?.hatchSteps) !== hatchStepsFilter) return false
+
       if (statusFilter !== 'all') {
         const allObtained = entry.ballStatuses.every((b) => b.status === '入手済み')
         if (statusFilter === '入手済み' && !allObtained) return false
@@ -247,8 +261,8 @@ export default function App() {
           (kanaIncludes(pokemon.name, q) ||
             kanaIncludes(displayName(pokemon), q) ||
             String(pokemon.nationalNo).includes(q))
-        const matchesBall = entry.ballStatuses.some((b) => kanaIncludes(b.ballType, q))
-        if (!matchesPokemon && !matchesBall) return false
+        // ボール名は検索対象にしない(全ポケモンが全種のボールを持つため、入力しても全員が一致して絞り込みにならない)
+        if (!matchesPokemon) return false
       }
 
       return true
@@ -269,7 +283,17 @@ export default function App() {
     }
 
     return list
-  }, [allDisplayEntries, search, statusFilter, titleFilter, sort, titleOverrides, gameTitleGroups])
+  }, [
+    allDisplayEntries,
+    search,
+    statusFilter,
+    titleFilter,
+    eggGroupFilter,
+    hatchStepsFilter,
+    sort,
+    titleOverrides,
+    gameTitleGroups,
+  ])
 
   // 絞り込み・並び替えが変わると一覧上の全国No.の並びの意味が変わるため、
   // 100番台ジャンプボタンが覚えている「直前のジャンプ先」は無効化して実測し直す。
@@ -279,7 +303,7 @@ export default function App() {
     lastJumpNoRef.current = null
     lastJumpIndexRef.current = null
     updateJumpButtonsVisibility()
-  }, [search, statusFilter, titleFilter, sort, updateJumpButtonsVisibility])
+  }, [search, statusFilter, titleFilter, eggGroupFilter, hatchStepsFilter, sort, updateJumpButtonsVisibility])
 
   const selectedEntry = allDisplayEntries.find((e) => e.id === selectedEntryId) ?? null
 
@@ -418,6 +442,8 @@ export default function App() {
     setSearch('')
     setStatusFilter('all')
     setTitleFilter('')
+    setEggGroupFilter('')
+    setHatchStepsFilter('')
   }
 
   const handleSaveTitleOverride = (title: string, pokemonIds: string[]) => {
@@ -617,30 +643,23 @@ export default function App() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-6">
       <div ref={headerRef} className="sticky top-0 z-20 bg-white pb-2 dark:bg-gray-900">
-        <h1 className="mb-4 text-xl font-bold">オシャボ管理</h1>
-
-        {saveError && (
-          <div className="mb-2 flex items-center justify-between gap-2 rounded bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950 dark:text-red-300">
-            <span>{saveError}</span>
-            <button
-              type="button"
-              className="shrink-0 underline"
-              onClick={() => setSaveError(null)}
-            >
-              閉じる
-            </button>
-          </div>
-        )}
-
         <Toolbar
           search={search}
           onSearchChange={setSearch}
           statusFilter={statusFilter}
           onStatusFilterChange={setStatusFilter}
           titleFilter={titleFilter}
+          eggGroupFilter={eggGroupFilter}
+          onEggGroupFilterChange={setEggGroupFilter}
+          eggGroups={allEggGroups()}
+          hatchStepsFilter={hatchStepsFilter}
+          onHatchStepsFilterChange={setHatchStepsFilter}
+          hatchStepsOptions={allHatchSteps()}
           onTitleFilterChange={setTitleFilter}
           gameTitleGroups={gameTitleGroups}
           onClearFilters={handleClearFilters}
+          visibleCount={visibleEntries.length}
+          totalCount={allDisplayEntries.length}
           menuOpen={menuOpen}
           onToggleMenu={() => setMenuOpen((v) => !v)}
           editMode={editMode}
@@ -650,7 +669,20 @@ export default function App() {
           onOpenTitleCuration={() => setShowTitleCuration(true)}
           onExport={() => exportEntriesToFile(entries)}
           onImportFile={handleImportFile}
-        />
+        >
+            {saveError && (
+              <div className="mb-3 flex items-center justify-between gap-2 rounded bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950 dark:text-red-300">
+                <span>{saveError}</span>
+                <button
+                  type="button"
+                  className="shrink-0 underline"
+                  onClick={() => setSaveError(null)}
+                >
+                  閉じる
+                </button>
+              </div>
+            )}
+        </Toolbar>
       </div>
 
       <PokemonTable

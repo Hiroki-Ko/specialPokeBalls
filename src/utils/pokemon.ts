@@ -54,3 +54,35 @@ export function allGameTitles(): string[] {
   }
   return [...set].sort()
 }
+
+/** タマゴグループの並び順(ゲーム内の図鑑・育て屋の表記順)。ここに無いグループが出てきたら末尾に追加される */
+const EGG_GROUP_ORDER = [
+  'かいじゅう',
+  'すいちゅう1',
+  'こんちゅう',
+  'ひこう',
+  'ようせい',
+  'りくじょう',
+  'しょくぶつ',
+  'ひとがた',
+  'すいちゅう3',
+  'こうぶつ',
+  'ふていけい',
+  'すいちゅう2',
+  'ドラゴン',
+  'タマゴみはっけん',
+]
+
+/** マスタに実在するタマゴグループの一覧(絞り込みの選択肢用) */
+export function allEggGroups(): string[] {
+  const set = new Set<string>()
+  for (const p of POKEMON_MASTER) for (const g of p.eggGroups) set.add(g)
+  const known = EGG_GROUP_ORDER.filter((g) => set.has(g))
+  const unknown = [...set].filter((g) => !EGG_GROUP_ORDER.includes(g)).sort()
+  return [...known, ...unknown]
+}
+
+/** マスタに実在する孵化歩数の一覧(少ない順。絞り込みの選択肢用) */
+export function allHatchSteps(): number[] {
+  return [...new Set(POKEMON_MASTER.map((p) => p.hatchSteps))].sort((a, b) => a - b)
+}
